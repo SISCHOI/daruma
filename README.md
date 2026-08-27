@@ -22,7 +22,23 @@ A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a Japanese roly-po
 
 ## Status
 
-Early development. See [`docs/research.md`](./docs/research.md) for the design rationale and architecture decisions.
+Core domain, the DSH plugin, and the watchdog are implemented and unit-tested
+(58 tests). `dsh-daruma` has been verified to load and activate in a real DSH
+boot (isolated profile on a separate port). See
+[`docs/research.md`](./docs/research.md) for the design rationale and
+architecture decisions (ADRs).
+
+Remaining before release: an end-to-end failover trigger against a live model
+failure, and npm publishing.
+
+## Packages
+
+- [`daruma-core`](./packages/daruma-core) — pure domain layer: failure taxonomy,
+  circuit breaker, recovery decision engine.
+- [`dsh-daruma`](./packages/dsh-daruma) — DSH plugin; see its
+  [README](./packages/dsh-daruma/README.md) for config.
+- [`daruma-watch`](./packages/daruma-watch) — Codex/CC watchdog; see its
+  [README](./packages/daruma-watch/README.md) for CLI usage.
 
 ## Development
 
