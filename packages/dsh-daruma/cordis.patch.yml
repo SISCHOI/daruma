@@ -1,16 +1,24 @@
 # dsh-daruma bundle patch: inserts the Daruma resilience plugin into a
-# profile's layer stack. Config below holds the channel failover list and
-# circuit-breaker thresholds; it is overridden by the profile's own
+# profile's layer stack. This config is overridden by the profile's own
 # cordis.patch.yml.
 - insert:
     - id: dsh-daruma
       name: 'dsh-daruma'
       config:
-        # Failover chain: ordered list of { provider, model } fallbacks.
-        # When the current channel is tripped, the next entry is tried.
-        channels: []
-        # Circuit breaker thresholds per channel.
+        # Failover chain, highest priority first. Each entry is a
+        # { provider, model } pair reachable by the LLM adapter registry.
+        # When the current channel trips, daruma switches to the next
+        # routable entry.
+        channels:
+          # - provider: mt
+          #   model: deepseek-v4-pro
+          # - provider: mt
+          #   model: glm-5.2
+        # Circuit breaker thresholds.
         failureBudget: 3
         cooldownMs: 30000
-        # Global give-up budget (total failovers per session before GIVE_UP).
+        # Maximum failovers per session before giving up entirely.
         giveUpBudget: 8
+        # Where channel health is persisted (defaults to
+        # ~/.dsh/daruma/channel-health.json).
+        # stateFile: ''
