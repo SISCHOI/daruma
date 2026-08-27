@@ -1,0 +1,26 @@
+{
+  "name": "daruma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Daruma — resilience watchdog for long-running coding-agent tasks (DSH / Codex CLI / Claude Code). Detects non-human interruption and keeps the session alive: retry, fail over to another model, or resume.",
+  "type": "module",
+  "license": "MIT",
+  "author": "SISCHOI",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}

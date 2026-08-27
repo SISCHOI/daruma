@@ -1,0 +1,39 @@
+{
+  "name": "daruma-core",
+  "version": "0.1.0",
+  "description": "Pure domain layer for Daruma: failure classification, channel health (circuit breaker), and recovery policy decision engine. Zero Node runtime dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "author": "SISCHOI",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "keywords": [
+    "daruma",
+    "resilience",
+    "failover",
+    "circuit-breaker",
+    "coding-agent"
+  ],
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
