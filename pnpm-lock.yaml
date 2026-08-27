@@ -39,7 +39,7 @@ importers:
   packages/daruma-watch:
     dependencies:
       daruma-core:
-        specifier: workspace:*
+        specifier: ^0.1.0
         version: link:../daruma-core
     devDependencies:
       typescript:
@@ -52,7 +52,7 @@ importers:
   packages/dsh-daruma:
     dependencies:
       daruma-core:
-        specifier: workspace:*
+        specifier: ^0.1.0
         version: link:../daruma-core
     devDependencies:
       '@deepseek-ai/cordis':

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { channelId, modelId, type Channel, type ChannelHealth, type ChannelHealthStore, type ChannelId, type RecoveryPolicyConfig } from 'daruma-core'
+import { channelId, modelId, type ChannelHealth, type ChannelHealthStore, type ChannelId, type RecoveryPolicyConfig } from 'daruma-core'
 import { RecoveryEngine } from './engine.ts'
 
 class MemoryStore implements ChannelHealthStore {

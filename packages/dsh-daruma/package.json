@@ -47,7 +47,7 @@
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.7"
   },
   "dependencies": {
-    "daruma-core": "workspace:*"
+    "daruma-core": "^0.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
