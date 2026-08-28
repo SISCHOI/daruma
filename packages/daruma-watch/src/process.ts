@@ -28,6 +28,19 @@ export function classifyOutcome(outcome: ProcessOutcome): 'PROCESS_EXITED' | 'ST
 }
 
 /**
+ * Run a command to completion, forwarding stdio, with no stall detection.
+ * Used for resume commands that may legitimately stay quiet while the agent
+ * "thinks".
+ */
+export function runInteractive(command: string): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(command, { shell: true, stdio: 'inherit' })
+    child.on('error', () => resolve(1))
+    child.on('exit', (code) => resolve(code ?? 1))
+  })
+}
+
+/**
  * Real runner: spawns through the shell, forwards output, and kills the
  * child if it produces no output for `stallTimeoutMs`.
  */
