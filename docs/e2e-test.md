@@ -4,6 +4,16 @@ Verifies `dsh-daruma` actually fails over at runtime: the primary channel return
 429, daruma trips it and switches to the fallback channel, and the task
 completes.
 
+## One-command web test environment
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-daruma-test.ps1
+```
+
+Starts the mock LLM server and the `daruma-test` DSH web profile together
+(`http://127.0.0.1:3081`), then cleans both up on Ctrl+C. Open the browser to
+see the channel-status dock and the backup-channel panel.
+
 ## Prerequisites
 
 - A built `dsh-daruma` (`pnpm --filter dsh-daruma build`).
