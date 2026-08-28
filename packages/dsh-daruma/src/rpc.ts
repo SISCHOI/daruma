@@ -147,7 +147,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
             throw new Error('bad-request: testCandidates needs provider and at least one model')
           }
           const candidates: Candidate[] = models.map((model) => ({ provider, model }))
-          return { ok: true, value: await probeCandidates(llm, candidates, { timeoutMs: 30_000 }, signal) }
+          return { ok: true, value: await probeCandidates(llm, candidates, { timeoutMs: 30_000, concurrency: 6 }, signal) }
         }
         case 'setBackup': {
           if (!isBackupPayload(payload)) throw new Error('bad-request: setBackup needs {provider, model}')

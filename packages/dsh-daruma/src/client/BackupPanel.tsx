@@ -1,13 +1,27 @@
 /**
  * BackupChannelPanel: probe candidate models for a provider and pick one as
  * the failover backup. Rendered inside a primitives Modal.
+ *
+ * Probing runs in small batches so results and progress stream into the list
+ * instead of blocking on all 30+ models at once.
  */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Modal, Pill, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button,
+  IconCheckOutline16,
+  IconLoadingOutline16,
+  IconPlayOutline16,
+  IconWarningOutline16,
+  Modal,
+  Pill,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CandidateView, DarumaApi, ProbeResultView, StatusView } from './api.ts'
 
 type Translate = (key: string) => string
+
+/** Models probed per RPC round; results stream into the list after each batch. */
+const BATCH = 6
 
 function deriveProvider(status: StatusView | null): string {
   if (status === null) return ''
@@ -43,6 +57,13 @@ const listStyle: React.CSSProperties = {
   overscrollBehavior: 'contain',
 }
 
+/** Skip rendering rows outside the viewport while scrolling. */
+const candidateRowStyle: React.CSSProperties = {
+  ...rowStyle,
+  contentVisibility: 'auto',
+  containIntrinsicSize: '28px',
+}
+
 /** Shorten an error for inline display; full text rides the title tooltip. */
 function shortError(message: string): string {
   return message.length > 36 ? `${message.slice(0, 33)}…` : message
@@ -58,8 +79,18 @@ const CandidateRow = memo(function CandidateRow(props: {
 }): React.JSX.Element {
   const { candidate, result, busy, t, onSetBackup } = props
   return (
-    <div style={rowStyle}>
-      <StateDot state={result === undefined ? 'ongoing' : result.ok ? 'done' : 'error'} size={8} />
+    <div style={candidateRowStyle}>
+      {result === undefined ? (
+        <span style={{ width: 14, flexShrink: 0 }} />
+      ) : result.ok ? (
+        <span style={{ display: 'inline-flex', color: 'var(--dsw-text-success, #30a46c)', flexShrink: 0 }}>
+          <IconCheckOutline16 size={14} />
+        </span>
+      ) : (
+        <span style={{ display: 'inline-flex', color: 'var(--dsw-text-danger, #e5484d)', flexShrink: 0 }}>
+          <IconWarningOutline16 size={14} />
+        </span>
+      )}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.model}</span>
       {result !== undefined && (
         <span style={noteStyle} title={result.error}>
@@ -85,6 +116,7 @@ export function BackupPanel(props: {
   const [candidates, setCandidates] = useState<CandidateView[] | null>(null)
   const [results, setResults] = useState<ProbeResultView[] | null>(null)
   const [testing, setTesting] = useState(false)
+  const [tested, setTested] = useState(0)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -120,8 +152,18 @@ export function BackupPanel(props: {
     setError(null)
     setNotice(null)
     setResults(null)
+    setTested(0)
+    const all: ProbeResultView[] = []
     try {
-      setResults(await api.testCandidates(provider, candidates.map((c) => c.model)))
+      // Stream results in batches: each RPC round probes BATCH models, then
+      // the list updates so progress is visible instead of one long wait.
+      for (let i = 0; i < candidates.length; i += BATCH) {
+        const batch = candidates.slice(i, i + BATCH)
+        const batchResults = await api.testCandidates(provider, batch.map((c) => c.model))
+        all.push(...batchResults)
+        setResults([...all])
+        setTested(all.length)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -221,7 +263,10 @@ export function BackupPanel(props: {
             <div style={rowStyle}>
               <span>{t('candidates')} ({candidates.length})</span>
               <Button size="sm" variant="primary" onClick={() => void test()} disabled={testing || candidates.length === 0}>
-                {testing ? `${t('testing')} (≤${candidates.length * 30}s)` : t('testAll')}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {testing ? <IconLoadingOutline16 size={14} /> : <IconPlayOutline16 size={14} />}
+                  {testing ? `${t('testing')} ${tested}/${candidates.length}` : t('testAll')}
+                </span>
               </Button>
             </div>
             <div style={noteStyle}>{t('testNote')}</div>
