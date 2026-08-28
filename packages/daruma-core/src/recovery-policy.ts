@@ -15,13 +15,12 @@ import {
   type ChannelHealth,
 } from './channel-health.ts'
 import type { RecoveryPolicyConfig } from './config.ts'
-import { isResumeCode, isTerminalCode } from './failure.ts'
+import { isTerminalCode } from './failure.ts'
 import type { FailureSignal } from './signal.ts'
 
 export type Verdict =
   | { readonly kind: 'RETRY_NOW' }
   | { readonly kind: 'FAILOVER'; readonly target: Channel }
-  | { readonly kind: 'RESUME'; readonly reason: string }
   | { readonly kind: 'GIVE_UP'; readonly reason: string }
 
 export interface RecoveryPlan {
@@ -44,14 +43,6 @@ export interface DecideInput {
 export function decide(input: DecideInput): RecoveryPlan {
   const { signal, healths, failoverCount, config, nowMs } = input
   const current = healths.get(signal.channel) ?? freshHealth(signal.channel, nowMs)
-
-  if (isResumeCode(signal.code)) {
-    return {
-      verdict: { kind: 'RESUME', reason: signal.code },
-      healthAfter: current,
-      failoverCount,
-    }
-  }
 
   const healthAfter = isTerminalCode(signal.code)
     ? trip(current, nowMs, config.cooldownMs)

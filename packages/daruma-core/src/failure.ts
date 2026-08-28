@@ -1,11 +1,9 @@
 /**
  * Provider-neutral failure taxonomy for Daruma.
  *
- * The first five codes mirror DeepSeek Harness's canonical model-request
- * failure classes; the watchdog adds `PROCESS_EXITED` and `STALLED` for
- * process-level interruption. Host adapters translate their native signals
- * (DSH `LlmFailure.code`, exit codes, log tails) into these codes — never the
- * other way around.
+ * These codes mirror DeepSeek Harness's canonical model-request failure
+ * classes. The DSH adapter translates `LlmFailure.code` into these codes —
+ * never the other way around.
  */
 
 export const FAILURE_CODES = [
@@ -17,8 +15,6 @@ export const FAILURE_CODES = [
   'QUOTA',
   'CONTEXT_WINDOW_EXCEEDED',
   'INVALID_CREDENTIAL',
-  'PROCESS_EXITED',
-  'STALLED',
   'UNKNOWN',
 ] as const
 
@@ -40,12 +36,6 @@ const TERMINAL_CODES: ReadonlySet<FailureCode> = new Set([
   'INVALID_CREDENTIAL',
 ])
 
-/** Process-level interruption; the remedy is resume, not a request retry. */
-const RESUME_CODES: ReadonlySet<FailureCode> = new Set([
-  'PROCESS_EXITED',
-  'STALLED',
-])
-
 export function isRetryableCode(code: FailureCode): boolean {
   // UNKNOWN is treated as retryable (conservative): try once more rather
   // than immediately burning a channel.
@@ -54,8 +44,4 @@ export function isRetryableCode(code: FailureCode): boolean {
 
 export function isTerminalCode(code: FailureCode): boolean {
   return TERMINAL_CODES.has(code)
-}
-
-export function isResumeCode(code: FailureCode): boolean {
-  return RESUME_CODES.has(code)
 }

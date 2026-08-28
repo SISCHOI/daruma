@@ -15,7 +15,7 @@ export type ModelId = string & { readonly [modelBrand]: 'ModelId' }
 /** One concrete failover target: a provider route plus a model on it. */
 export interface Channel {
   readonly id: ChannelId
-  /** Provider route name (DSH provider / Codex provider id / CC model tag). */
+  /** Provider route name (a DSH provider route). */
   readonly provider: string
   readonly model: ModelId
 }

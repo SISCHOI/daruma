@@ -2,27 +2,27 @@
 
 Pure domain layer for Daruma: failure classification, channel health (circuit
 breaker), and the recovery decision engine. Zero Node runtime dependencies —
-no `node:*` imports, no DSH/Codex/Claude symbols.
+no `node:*` imports, no DSH symbols.
 
 ## Domain
 
 - `FailureCode` — provider-neutral taxonomy (`RATE_LIMIT`, `SERVER`,
   `TIMEOUT`, `TRANSPORT`, `EMPTY_RESPONSE`, `QUOTA`, `CONTEXT_WINDOW_EXCEEDED`,
-  `INVALID_CREDENTIAL`, `PROCESS_EXITED`, `STALLED`, `UNKNOWN`).
+  `INVALID_CREDENTIAL`, `UNKNOWN`).
 - `ChannelHealth` — circuit-breaker state machine
   (`HEALTHY → COOLDOWN → PROBE → HEALTHY`).
 - `decide()` — pure decision engine: same input → same `RecoveryPlan`
-  (`RETRY_NOW` / `FAILOVER` / `RESUME` / `GIVE_UP`).
+  (`RETRY_NOW` / `FAILOVER` / `GIVE_UP`).
 
 ## Ports
 
-`Clock`, `ChannelHealthStore`, `HealthProbe`, `SignalSource` — defined here,
-implemented by host adapters (`dsh-daruma`, `daruma-watch`).
+`Clock`, `ChannelHealthStore` — defined here,
+implemented by the host adapter (`dsh-daruma`).
 
 ## API
 
 ```ts
-import { decide, channelId, modelId, backoffDelayMs } from 'daruma-core'
+import { decide, channelId, modelId } from 'daruma-core'
 
 const plan = decide({
   signal: { code: 'QUOTA', channel: channelId('mt::a'), occurredAtMs: Date.now() },

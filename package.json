@@ -2,7 +2,7 @@
   "name": "daruma",
   "version": "0.1.0",
   "private": true,
-  "description": "Daruma — resilience watchdog for long-running coding-agent tasks (DSH / Codex CLI / Claude Code). Detects non-human interruption and keeps the session alive: retry, fail over to another model, or resume.",
+  "description": "Daruma — resilience plugin for DeepSeek Harness: fails over to another model/channel when a flaky third-party API kills a long task.",
   "type": "module",
   "license": "MIT",
   "author": "SISCHOI",

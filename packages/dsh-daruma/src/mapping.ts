@@ -2,8 +2,8 @@
  * Translation between DeepSeek Harness types and the daruma-core domain.
  *
  * DSH failure `code`s are stable provider-neutral strings; the domain
- * taxonomy mirrors them and adds the watchdog codes. Anything unknown is
- * downgraded to `UNKNOWN` (treated as retryable).
+ * taxonomy mirrors them. Anything unknown is downgraded to `UNKNOWN`
+ * (treated as retryable).
  */
 
 import type { LlmCallConfig, LlmFailure } from '@deepseek-ai/dsh-llm'
@@ -24,8 +24,6 @@ const KNOWN_FAILURE_CODES: ReadonlySet<string> = new Set([
   'QUOTA',
   'CONTEXT_WINDOW_EXCEEDED',
   'INVALID_CREDENTIAL',
-  'PROCESS_EXITED',
-  'STALLED',
 ])
 
 export function toFailureCode(code: string): FailureCode {

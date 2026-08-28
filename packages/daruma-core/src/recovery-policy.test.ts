@@ -111,19 +111,6 @@ describe('recovery policy decide()', () => {
     expect(plan.failoverCount).toBe(8)
   })
 
-  it('returns RESUME for a process-level interruption', () => {
-    const plan = decide({
-      signal: signal('PROCESS_EXITED'),
-      healths: healthsOf([[A, freshHealth(A, 0)]]),
-      failoverCount: 0,
-      config,
-      nowMs: 1000,
-    })
-    expect(plan.verdict).toMatchObject({ kind: 'RESUME', reason: 'PROCESS_EXITED' })
-    // RESUME does not mutate channel health.
-    expect(plan.healthAfter.consecutiveFailures).toBe(0)
-  })
-
   it('is deterministic: same input → same plan', () => {
     const mk = () => ({
       signal: signal('SERVER', A, 1000),

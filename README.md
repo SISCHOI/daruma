@@ -2,19 +2,23 @@
 
 > 达摩不倒翁：被击倒，就再站起来。
 
-**Daruma** is a resilience watchdog for long-running coding-agent tasks. It targets one recurring failure mode: third-party API subscriptions that are flaky — `429`/`500` rate limits, network jitter, provider-side model stalls, and moderation/风控 gatekeeping. When any of these kill a long task mid-flight, daruma detects the non-human interruption and keeps the session alive by one of three escalating strategies:
+**Daruma** is a resilience plugin for DeepSeek Harness (DSH). It targets one
+recurring failure mode: third-party API subscriptions that are flaky — `429`/`500`
+rate limits, network jitter, provider-side model stalls, and moderation/风控
+gatekeeping. When any of these kill a long task mid-flight, daruma detects the
+failure and **fails over to another model/channel** so the session keeps going.
 
-1. **retry** — same provider, bounded exponential backoff;
-2. **fail over** — switch to another model / channel and continue;
-3. **resume** — the process died; restart it and resume the same session.
+Two mechanisms cooperate:
 
-It works across three agent CLIs:
+1. **retry** — same channel, bounded backoff (owned by the in-box `dsh-llm-retry`);
+2. **fail over** — after retry gives up or a terminal error (`QUOTA` /
+   `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`) hits, daruma switches to
+   the next channel and continues.
 
-| Package | Host | Integration | Recovery |
-|---|---|---|---|
-| [`dsh-daruma`](./packages/dsh-daruma) | DeepSeek Harness (DSH) | native Cordis plugin (`agent/request-error` + `agent/request`) | in-process failover |
-| [`daruma-watch`](./packages/daruma-watch) | Codex CLI / Claude Code | external watchdog daemon (`npx daruma-watch`) | process-level resume |
-| [`daruma-core`](./packages/daruma-core) | — | pure domain layer (no Node deps) | shared decision engine |
+| Package | Role |
+|---|---|
+| [`dsh-daruma`](./packages/dsh-daruma) | native Cordis plugin (`agent/request-error` + `agent/request`) — in-process failover |
+| [`daruma-core`](./packages/daruma-core) | pure domain layer (no Node deps) — failure taxonomy, circuit breaker, decision engine |
 
 ## Why "daruma"
 
@@ -22,16 +26,14 @@ A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a Japanese roly-po
 
 ## Status
 
-Core domain, the DSH plugin, and the watchdog are implemented and unit-tested
-(67 tests). `dsh-daruma` has been verified end-to-end: a mock 429 on the
-primary channel fails over to the fallback channel and the task completes
-(see [`docs/e2e-test.md`](./docs/e2e-test.md)). `daruma-watch` can discover and
-resume Codex sessions from the CLI **and** the VS Code extension (shared
-session store). See [`docs/research.md`](./docs/research.md) for the design
-rationale and architecture decisions (ADRs).
+Core domain and the DSH plugin are implemented and unit-tested (44 tests).
+`dsh-daruma` has been verified end-to-end: a mock 429 on the primary channel
+fails over to the fallback channel and the task completes (see
+[`docs/e2e-test.md`](./docs/e2e-test.md)). See
+[`docs/research.md`](./docs/research.md) for the design rationale and
+architecture decisions (ADRs).
 
-Remaining before release: a live `codex exec resume` trigger (real LLM call),
-and npm publishing.
+Remaining before release: npm publishing.
 
 ## Packages
 
@@ -39,8 +41,6 @@ and npm publishing.
   circuit breaker, recovery decision engine.
 - [`dsh-daruma`](./packages/dsh-daruma) — DSH plugin; see its
   [README](./packages/dsh-daruma/README.md) for config.
-- [`daruma-watch`](./packages/daruma-watch) — Codex/CC watchdog; see its
-  [README](./packages/daruma-watch/README.md) for CLI usage.
 
 ## Development
 
