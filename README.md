@@ -23,13 +23,15 @@ A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a Japanese roly-po
 ## Status
 
 Core domain, the DSH plugin, and the watchdog are implemented and unit-tested
-(58 tests). `dsh-daruma` has been verified to load and activate in a real DSH
-boot (isolated profile on a separate port). See
-[`docs/research.md`](./docs/research.md) for the design rationale and
-architecture decisions (ADRs).
+(67 tests). `dsh-daruma` has been verified end-to-end: a mock 429 on the
+primary channel fails over to the fallback channel and the task completes
+(see [`docs/e2e-test.md`](./docs/e2e-test.md)). `daruma-watch` can discover and
+resume Codex sessions from the CLI **and** the VS Code extension (shared
+session store). See [`docs/research.md`](./docs/research.md) for the design
+rationale and architecture decisions (ADRs).
 
-Remaining before release: an end-to-end failover trigger against a live model
-failure, and npm publishing.
+Remaining before release: a live `codex exec resume` trigger (real LLM call),
+and npm publishing.
 
 ## Packages
 

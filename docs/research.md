@@ -92,10 +92,19 @@ daruma-core（纯域层，零运行时依赖）
 |---|---|
 | daruma-core 32 单测 | ✅ |
 | dsh-daruma 12 单测 | ✅ |
-| daruma-watch 14 单测 | ✅ |
-| dsh-daruma 实机启动（独立 profile `daruma-test` @ 3081，HTTP 200，无未解析服务） | ✅ |
+| daruma-watch 23 单测（含 codex 会话扫描 9 个） | ✅ |
+| dsh-daruma 实机启动（独立 profile @ 3081，HTTP 200，无未解析服务） | ✅ |
+| **dsh-daruma 端到端 failover**（mock LLM：mock-a 429 → 自动切 mock-b → 任务完成） | ✅ |
 | daruma-watch CLI 端到端（exit 1 → resume → exit 0） | ✅ |
-| dsh-daruma 实机 failover（需真实 model 失败触发） | ⏳ 待做（需 mock LLM server 或真实 429 触发） |
+| **daruma-watch codex 会话扫描**（真实 ~/.codex/sessions，16 会话识别出 1 个中断，含 VS Code 扩展来源） | ✅ |
+| 真实 `codex exec resume <id>` 触发（会真实调 LLM，需用户手动确认） | ⏳ 语法已核实，未实际触发 |
+| 真实 `claude -r` 触发（本机未装 claude） | ⏳ 语法已核实，未实际触发 |
+
+### 端到端 failover 复现方法
+
+见 [e2e-test.md](./e2e-test.md)：用 `scripts/mock-llm-server.mjs` 模拟「主渠道 429、备渠道 200」，
+在独立 headless profile 里配置 daruma 渠道 `mock-a → mock-b`，跑一个任务即可观察到
+`mock-a → 429 → FAILOVER → mock-b → 200` 的完整链路。
 
 ## 5. 非目标（当前不做）
 

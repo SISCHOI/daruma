@@ -22,6 +22,26 @@ npx daruma-watch \
   --max-resumes 3
 ```
 
+## Codex sessions (CLI + VS Code extension)
+
+Codex stores every session — CLI, VS Code extension, Desktop — in one place
+(`~/.codex/sessions`). daruma-watch can list them and resume any of them,
+regardless of which surface created them.
+
+```bash
+# List sessions, newest first (status + originator + name)
+npx daruma-watch codex sessions
+
+# List only interrupted sessions
+npx daruma-watch codex sessions --interrupted
+
+# Machine-readable
+npx daruma-watch codex sessions --interrupted --json
+
+# Resume a session non-interactively
+npx daruma-watch codex resume <session-id>
+```
+
 ## Behavior
 
 1. Run `--cmd`; forward its output.
@@ -52,3 +72,4 @@ trigger a resume.
 pnpm --filter daruma-watch build
 pnpm --filter daruma-watch test
 ```
+
