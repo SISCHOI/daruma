@@ -48,4 +48,21 @@ describe('probeCandidates', () => {
     const results = await probeCandidates(llm, [{ provider: 'mock', model: 'empty' }], { timeoutMs: 5000 })
     expect(results[0]).toMatchObject({ ok: false })
   })
+
+  it('settles a hung stream via the hard timeout race', async () => {
+    // A stream that never yields and never rejects: `for await` would hang
+    // forever without the race timeout.
+    const prepareCall = vi.fn().mockResolvedValue({})
+    // A real async generator that awaits forever: `for await` hangs here.
+    const stream = vi.fn().mockImplementation(async function* () {
+      await new Promise<never>(() => {})
+    })
+    const llm = { prepareCall, stream } as unknown as LlmRuntime
+    const started = Date.now()
+    const results = await probeCandidates(llm, [{ provider: 'mock', model: 'hang' }], { timeoutMs: 50 })
+    const elapsed = Date.now() - started
+    expect(results[0]).toMatchObject({ ok: false })
+    expect(results[0]?.error).toContain('timeout')
+    expect(elapsed).toBeLessThan(2000)
+  })
 })

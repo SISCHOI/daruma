@@ -16,6 +16,10 @@ import { createServer } from 'node:http'
 
 const PORT = Number(process.argv[2] ?? 3099)
 const FAIL_MODEL = process.env.FAIL_MODEL ?? 'mock-a'
+/** Optional per-request delay in ms, to observe concurrency. */
+const DELAY_MS = Number(process.env.DELAY_MS ?? 0)
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -44,26 +48,33 @@ function handleChatCompletions(req, res, body) {
 
   const text = `mock completion from ${model}`
 
-  if (body.stream === true) {
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+  const respond = () => {
+    if (body.stream === true) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      })
+      res.write(`data: ${JSON.stringify(completionChunk(model, { role: 'assistant', content: text }))}\n\n`)
+      res.write(`data: ${JSON.stringify(completionChunk(model, { role: undefined, content: undefined, finish: 'stop' }))}\n\n`)
+      res.write('data: [DONE]\n\n')
+      return res.end()
+    }
+    return sendJson(res, 200, {
+      id: 'chatcmpl-mock',
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
     })
-    res.write(`data: ${JSON.stringify(completionChunk(model, { role: 'assistant', content: text }))}\n\n`)
-    res.write(`data: ${JSON.stringify(completionChunk(model, { role: undefined, content: undefined, finish: 'stop' }))}\n\n`)
-    res.write('data: [DONE]\n\n')
-    return res.end()
   }
 
-  return sendJson(res, 200, {
-    id: 'chatcmpl-mock',
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model,
-    choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }],
-    usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
-  })
+  if (DELAY_MS > 0) {
+    void sleep(DELAY_MS).then(respond)
+    return
+  }
+  return respond()
 }
 
 const server = createServer((req, res) => {
