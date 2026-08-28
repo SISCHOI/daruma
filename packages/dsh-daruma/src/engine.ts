@@ -102,6 +102,11 @@ export class RecoveryEngine {
     return this.failoverTotal
   }
 
+  /** Configured failover channels (for provider discovery). */
+  get channels(): readonly Channel[] {
+    return this.config.channels
+  }
+
   /** Recent failovers, newest last (bounded). */
   get history(): readonly FailoverRecord[] {
     return this.failoverHistory

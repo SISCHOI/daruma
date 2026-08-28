@@ -102,5 +102,5 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return next()
   })
 
-  mountRpc(ctx, { engine, currentChannel, status, getLlm: () => ctx.llm })
+  mountRpc(ctx, { engine, currentChannel, status, getLlm: () => ctx.llm, getSettings: () => ctx.settings })
 }

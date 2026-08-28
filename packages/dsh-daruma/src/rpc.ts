@@ -5,6 +5,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmRuntime, LlmModelInfo } from '@deepseek-ai/dsh-llm'
+import type { SettingsProvider, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
 import type { StatusService } from './status.ts'
@@ -19,6 +20,7 @@ export interface RpcDeps {
   readonly currentChannel: ReadonlyMap<string, ChannelId>
   readonly status: StatusService
   readonly getLlm: () => LlmRuntime | undefined
+  readonly getSettings: () => SettingsProvider | undefined
 }
 
 function messageOf(error: unknown): string {
@@ -50,20 +52,57 @@ function isBackupPayload(value: unknown): value is { provider: string; model: st
     && isString(value.model) && value.model !== ''
 }
 
-/** Discover candidate models for a provider via the adapter's model directory. */
+/** The `llm-pi-ai` settings section shape (providers → models). */
+interface PiAiSection {
+  providers?: Record<string, { models?: readonly { id?: string }[] }>
+}
+
+/** Known provider names: daruma's configured channels plus settings providers. */
+function knownProviders(deps: RpcDeps): string[] {
+  const names = new Set<string>()
+  for (const channel of deps.engine.channels) names.add(channel.provider)
+  const settings = deps.getSettings()
+  if (settings !== undefined) {
+    try {
+      const section = settings.get('llm-pi-ai' as SettingsNamespace) as PiAiSection | undefined
+      for (const provider of Object.keys(section?.providers ?? {})) names.add(provider)
+    } catch {
+      // settings unavailable — configured channels still known
+    }
+  }
+  return [...names]
+}
+
+/**
+ * Discover candidate models for a provider: the adapter's model directory
+ * first, then the `llm-pi-ai` settings section as a fallback.
+ */
 async function listCandidates(
   llm: LlmRuntime,
   provider: string,
+  settings?: SettingsProvider,
 ): Promise<Candidate[]> {
-  let models: LlmModelInfo[] = []
   try {
-    models = await llm.listModels(provider)
+    const models: LlmModelInfo[] = await llm.listModels(provider)
+    if (models.length > 0) return models.map((info) => ({ provider, model: info.id }))
   } catch {
-    // Adapter does not advertise a model directory; fall back to the
-    // current channel's provider list from config.
-    return []
+    // fall through to the settings model directory
   }
-  return models.map((info) => ({ provider, model: info.id }))
+  if (settings !== undefined) {
+    try {
+      const section = settings.get('llm-pi-ai' as SettingsNamespace) as PiAiSection | undefined
+      const models = section?.providers?.[provider]?.models
+      if (models !== undefined && models.length > 0) {
+        return models
+          .map((model) => model.id)
+          .filter((id): id is string => id !== undefined && id !== '')
+          .map((model) => ({ provider, model }))
+      }
+    } catch {
+      // settings unavailable
+    }
+  }
+  return []
 }
 
 export function mountRpc(ctx: Context, deps: RpcDeps): void {
@@ -87,6 +126,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
               channels: deps.engine.listHealth(),
               failoverCount: deps.engine.failoverCount,
               failoverHistory: deps.engine.history,
+              providers: knownProviders(deps),
             },
           }
         }
@@ -95,7 +135,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
           if (provider === undefined) throw new Error('bad-request: listCandidates needs a provider')
           const llm = deps.getLlm()
           if (llm === undefined) throw new Error('llm service unavailable')
-          return { ok: true, value: await listCandidates(llm, provider) }
+          return { ok: true, value: await listCandidates(llm, provider, deps.getSettings()) }
         }
         case 'testCandidates': {
           if (!isProbePayload(payload)) throw new Error('bad-request: testCandidates payload is invalid')

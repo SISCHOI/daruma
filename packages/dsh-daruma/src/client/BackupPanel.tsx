@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Button, Input, Modal, Pill, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal, Pill, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CandidateView, DarumaApi, ProbeResultView, StatusView } from './api.ts'
 
 type Translate = (key: string) => string
@@ -13,7 +13,7 @@ function deriveProvider(status: StatusView | null): string {
   if (status === null) return ''
   if (status.current !== null) return status.current.split('::')[0] ?? ''
   if (status.backup !== null) return status.backup.provider
-  return ''
+  return status.providers[0] ?? ''
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -64,7 +64,7 @@ export function BackupPanel(props: {
 
   useEffect(() => {
     if (provider !== '') void loadCandidates()
-  }, [])
+  }, [provider])
 
   const test = async (): Promise<void> => {
     if (candidates === null || candidates.length === 0) return
@@ -136,11 +136,24 @@ export function BackupPanel(props: {
         )}
 
         <div style={rowStyle}>
-          <Input
-            value={provider}
-            placeholder={t('providerPlaceholder')}
-            onChange={(event) => setProvider(event.currentTarget.value)}
-          />
+          {(status?.providers ?? []).length > 0 ? (
+            <select
+              value={provider}
+              onChange={(event) => setProvider(event.currentTarget.value)}
+              style={{ flex: 1, padding: '4px 8px', fontSize: 13 }}
+            >
+              {status?.providers.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={provider}
+              placeholder={t('providerPlaceholder')}
+              onChange={(event) => setProvider(event.currentTarget.value)}
+              style={{ flex: 1, padding: '4px 8px', fontSize: 13 }}
+            />
+          )}
           <Button size="sm" variant="outline" onClick={() => void loadCandidates()} disabled={provider === '' || loading}>
             {loading ? t('testing') : t('loadCandidates')}
           </Button>
