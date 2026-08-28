@@ -111,6 +111,34 @@ describe('recovery policy decide()', () => {
     expect(plan.failoverCount).toBe(8)
   })
 
+  it('prefers the user-chosen backup channel over the fallback chain', () => {
+    const preferred = channels[1]! // B
+    const plan = decide({
+      signal: signal('QUOTA', A),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+      preferred,
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+  })
+
+  it('skips a cooled-down backup channel', () => {
+    const preferred = channels[1]! // B
+    const b = { ...freshHealth(B, 0), state: 'COOLDOWN', cooldownUntilMs: 90_000 } as ChannelHealth
+    const plan = decide({
+      signal: signal('QUOTA', A),
+      healths: healthsOf([[A, freshHealth(A, 0)], [B, b]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+      preferred,
+    })
+    // B is cooling → falls through to C.
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: C } })
+  })
+
   it('is deterministic: same input → same plan', () => {
     const mk = () => ({
       signal: signal('SERVER', A, 1000),

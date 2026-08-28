@@ -38,6 +38,8 @@ export interface DecideInput {
   readonly failoverCount: number
   readonly config: RecoveryPolicyConfig
   readonly nowMs: number
+  /** Optional user-chosen backup channel, tried before the fallback chain. */
+  readonly preferred?: Channel
 }
 
 export function decide(input: DecideInput): RecoveryPlan {
@@ -62,7 +64,7 @@ export function decide(input: DecideInput): RecoveryPlan {
     }
   }
 
-  const target = pickFallback(signal.channel, healths, config, nowMs)
+  const target = pickFallback(signal.channel, healths, config, nowMs, input.preferred)
   if (target === undefined) {
     return {
       verdict: { kind: 'GIVE_UP', reason: 'no-routable-fallback' },
@@ -79,16 +81,25 @@ export function decide(input: DecideInput): RecoveryPlan {
 }
 
 /**
- * Pick the first routable channel in priority order that is not the failed
- * one. A cooled-down channel whose cooldown expired is routable (it becomes a
- * probe target).
+ * Pick a failover target: the user-chosen `preferred` channel first (when it
+ * is routable and not the failed channel), then the first routable channel in
+ * priority order. A cooled-down channel whose cooldown expired is routable
+ * (it becomes a probe target).
  */
 export function pickFallback(
   failed: ChannelId,
   healths: ReadonlyMap<ChannelId, ChannelHealth>,
   config: RecoveryPolicyConfig,
   nowMs: number,
+  preferred?: Channel,
 ): Channel | undefined {
+  if (
+    preferred !== undefined
+    && preferred.id !== failed
+    && canRouteNow(healths.get(preferred.id) ?? freshHealth(preferred.id, nowMs), nowMs)
+  ) {
+    return preferred
+  }
   for (const channel of config.channels) {
     if (channel.id === failed) continue
     const health = healths.get(channel.id) ?? freshHealth(channel.id, nowMs)
