@@ -50,10 +50,10 @@ export function apply(ctx: ClientContext): void {
     connection.rpc.call('/dsh-daruma', endpoint, payload ?? {}) as Promise<RpcResult>
   const api = createApi(rpc)
 
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock',
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
     id: 'daruma-status',
-    order: 5,
+    order: 0,
     inject: () => ({ api, t }),
   }, () => h(StatusDock, { api, t })))
 }

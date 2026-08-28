@@ -113,6 +113,18 @@ export function BackupPanel(props: {
       footer={<Button variant="primary" onClick={onClose}>{t('close')}</Button>}
     >
       <div style={sectionStyle}>
+        {status !== null && status.failoverCount > 0 && (
+          <div style={noteStyle}>
+            {t('failoverCount')}: {status.failoverCount}
+            {status.failoverHistory.length > 0 && (
+              <>
+                {' · '}
+                {t('lastFailover')}: {status.failoverHistory.map((h) => `${h.from} → ${h.to}`).join(' · ')}
+              </>
+            )}
+          </div>
+        )}
+
         {status?.backup !== null && status?.backup !== undefined && (
           <div style={rowStyle}>
             <span>{t('currentBackup')}:</span>
