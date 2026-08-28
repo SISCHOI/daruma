@@ -67,14 +67,25 @@ daruma-core（纯域层，零运行时依赖）
 - 不变量：COOLDOWN 期间不路由；连续失败达预算熔断；`QUOTA`/`INVALID_CREDENTIAL`/`CONTEXT_WINDOW_EXCEEDED` 直接熔断（retry 无意义）；全局 `giveUpBudget` 耗尽 → `GIVE_UP` 终态。
 - 渠道健康经 `ChannelHealthStore` 落盘（`~/.dsh/daruma/channel-health.json`），跨重启记住熔断。
 
+### ADR-006 备用渠道与状态 UI
+
+- **备用渠道**：存 `daruma:` settings namespace（`ctx.settings`），failover 决策优先选备用（`decide().preferred`）。
+- **settings 空对象怪癖**：schemastery 对缺省 section 解析为空对象 `{}` 而非 `undefined`，`getBackup()` 必须校验 provider/model 非空，否则空对象会被当成合法 backup 选中（曾导致 failover 切到字段全 undefined 的渠道）。
+- **状态 UI**：client bundle 挂 `conversation.input.dock`（常驻状态条）+ 弹出面板（候选测试/设备用），经 `/dsh-daruma` RPC 通信；failover 追加 durable `daruma/failover` 事件。
+- **failover 历史**：engine 内存保留最近 5 次 failover，状态条显示「最近切换」。完整的会话流 conversation node 事件行暂缓。
+
 ## 4. 验证状态
 
 | 项 | 状态 |
 |---|---|
-| daruma-core 32 单测 | ✅ |
-| dsh-daruma 12 单测 | ✅ |
+| daruma-core 27 单测 | ✅ |
+| dsh-daruma 20 单测 | ✅ |
 | dsh-daruma 实机启动（独立 profile @ 3081，HTTP 200，无未解析服务） | ✅ |
-| **dsh-daruma 端到端 failover**（mock LLM：mock-a 429 → 自动切 mock-b → 任务完成） | ✅ |
+| **dsh-daruma 端到端 failover**（mock LLM：mock-a 429 → 自动切 mock-b → 任务完成，exit 0） | ✅ |
+| **/dsh-daruma RPC 挂载**（status / listCandidates / testCandidates / setBackup） | ✅ 3081 实机启动无错 |
+| **client bundle 加载**（`/plugins/dsh-daruma/client.js` serve 200） | ✅ |
+| 状态条 / 备用面板的浏览器交互（需人工打开 3081 确认视觉） | ⏳ 代码与加载已验证，视觉待用户确认 |
+| 完整 conversation node 会话流事件行 | ⏳ 简化为状态条「最近切换」显示，完整版记入后续 |
 
 ### 端到端 failover 复现方法
 

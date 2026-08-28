@@ -54,7 +54,12 @@ A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a roly-poly toy ro
 
 ## Status
 
-Implemented and tested: 37 unit tests, plus an end-to-end failover run (mock `429` on the primary channel → automatic switch → task completes). See [`docs/e2e-test.md`](./docs/e2e-test.md) and [`docs/research.md`](./docs/research.md).
+Implemented and tested: 47 unit tests, plus an end-to-end failover run (mock
+`429` on the primary channel → automatic switch → task completes). The plugin
+also ships a web client: a channel-status dock above the composer and a backup
+panel that probes candidate models and picks a backup. See
+[`docs/e2e-test.md`](./docs/e2e-test.md) and
+[`docs/research.md`](./docs/research.md).
 
 Not yet published to npm.
 
