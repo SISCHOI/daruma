@@ -172,29 +172,31 @@ export function BackupPanel(props: {
             </div>
             <div style={noteStyle}>{t('testNote')}</div>
             {candidates.length === 0 && <div style={noteStyle}>{t('noCandidates')}</div>}
-            {candidates.map((candidate) => {
-              const result = results?.find((r) => r.model === candidate.model)
-              return (
-                <div key={candidate.model} style={rowStyle}>
-                  <StateDot state={result === undefined ? 'ongoing' : result.ok ? 'done' : 'error'} size={8} />
-                  <span style={{ flex: 1 }}>{candidate.model}</span>
-                  {result !== undefined && (
-                    <span style={noteStyle}>
-                      {result.ok ? t('resultOk') : t('resultFail')} · {result.latencyMs}ms
-                      {!result.ok && result.error !== undefined ? ` (${result.error})` : ''}
-                    </span>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy !== null}
-                    onClick={() => void setBackup(candidate.model)}
-                  >
-                    {busy === candidate.model ? t('testing') : t('setBackup')}
-                  </Button>
-                </div>
-              )
-            })}
+            <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {candidates.map((candidate) => {
+                const result = results?.find((r) => r.model === candidate.model)
+                return (
+                  <div key={candidate.model} style={rowStyle}>
+                    <StateDot state={result === undefined ? 'ongoing' : result.ok ? 'done' : 'error'} size={8} />
+                    <span style={{ flex: 1 }}>{candidate.model}</span>
+                    {result !== undefined && (
+                      <span style={noteStyle}>
+                        {result.ok ? t('resultOk') : t('resultFail')} · {result.latencyMs}ms
+                        {!result.ok && result.error !== undefined ? ` (${result.error})` : ''}
+                      </span>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy !== null}
+                      onClick={() => void setBackup(candidate.model)}
+                    >
+                      {busy === candidate.model ? t('testing') : t('setBackup')}
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
           </>
         )}
       </div>
