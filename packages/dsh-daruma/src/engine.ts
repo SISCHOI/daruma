@@ -10,9 +10,11 @@
 import {
   decide,
   freshHealth,
+  type Channel,
   type ChannelHealth,
   type ChannelHealthStore,
   type ChannelId,
+  type ChannelState,
   type Clock,
   type FailureSignal,
   type RecoveryPlan,
@@ -21,9 +23,15 @@ import {
 
 const systemClock: Clock = { nowMs: () => Date.now() }
 
+export interface ChannelHealthView {
+  readonly channel: ChannelId
+  readonly state: ChannelState
+  readonly failures: number
+}
+
 export class RecoveryEngine {
   private readonly healths = new Map<ChannelId, ChannelHealth>()
-  private failoverCount = 0
+  private failoverTotal = 0
   private readonly clock: Clock
 
   constructor(
@@ -45,19 +53,33 @@ export class RecoveryEngine {
   }
 
   /** Feed one failure signal and persist the resulting state. */
-  onFailure(signal: FailureSignal): RecoveryPlan {
+  onFailure(signal: FailureSignal, preferred?: Channel): RecoveryPlan {
     const plan = decide({
       signal,
       healths: this.healths,
-      failoverCount: this.failoverCount,
+      failoverCount: this.failoverTotal,
       config: this.config,
       nowMs: this.clock.nowMs(),
+      ...(preferred !== undefined ? { preferred } : {}),
     })
     this.healths.set(signal.channel, plan.healthAfter)
     this.store.save(plan.healthAfter)
     if (plan.verdict.kind === 'FAILOVER') {
-      this.failoverCount = plan.failoverCount
+      this.failoverTotal = plan.failoverCount
     }
     return plan
+  }
+
+  /** Snapshot of every tracked channel's health, for the status UI. */
+  listHealth(): ChannelHealthView[] {
+    return [...this.healths.values()].map((health) => ({
+      channel: health.channel,
+      state: health.state,
+      failures: health.consecutiveFailures,
+    }))
+  }
+
+  get failoverCount(): number {
+    return this.failoverTotal
   }
 }
