@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline16, IconWarningOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DarumaApi, StatusView } from './api.ts'
 import { BackupPanel } from './BackupPanel.tsx'
 
@@ -29,6 +29,24 @@ function overallState(status: StatusView | null): Dot {
   if (status.channels.some((c) => c.state === 'COOLDOWN')) return 'error'
   if (status.channels.some((c) => c.state === 'PROBE')) return 'warning'
   return 'done'
+}
+
+const iconColor: Record<Dot, string> = {
+  done: 'var(--dsw-text-success, #30a46c)',
+  warning: 'var(--dsw-text-warning, #f5a524)',
+  error: 'var(--dsw-text-danger, #e5484d)',
+  ongoing: 'var(--dsw-text-secondary, #888)',
+}
+
+/** Status glyph: a check when healthy, a warning otherwise. */
+function StatusIcon(props: { state: Dot }): React.JSX.Element {
+  return (
+    <span style={{ display: 'inline-flex', color: iconColor[props.state], flexShrink: 0 }}>
+      {props.state === 'done'
+        ? <IconCheckOutline16 size={14} />
+        : <IconWarningOutline16 size={14} />}
+    </span>
+  )
 }
 
 export function StatusDock(props: { api: DarumaApi; t: Translate }): React.JSX.Element {
@@ -64,7 +82,7 @@ export function StatusDock(props: { api: DarumaApi; t: Translate }): React.JSX.E
         onClick={() => setPanelOpen(true)}
         style={controlStyle}
       >
-        <StateDot state={overallState(status)} size={8} />
+        <StatusIcon state={overallState(status)} />
         <span>{t('backup')}: {backupLabel}</span>
       </Button>
       {panelOpen && (

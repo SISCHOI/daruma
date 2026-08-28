@@ -23,6 +23,8 @@ export interface ProbeResult extends Candidate {
 export interface ProbeOptions {
   readonly timeoutMs?: number
   readonly maxTokens?: number
+  /** Concurrent probes; sequential when 1. Default 5. */
+  readonly concurrency?: number
 }
 
 export interface ProbeProgress {
@@ -92,8 +94,8 @@ async function probeOne(
 }
 
 /**
- * Probe candidates sequentially (providers throttle concurrent requests) with
- * per-model hard timeouts and an optional progress callback.
+ * Probe candidates with bounded concurrency (default 5) and per-model hard
+ * timeouts. Progress fires after each model settles, in completion order.
  */
 export async function probeCandidates(
   llm: LlmRuntime,
@@ -102,12 +104,22 @@ export async function probeCandidates(
   signal?: AbortSignal,
   onProgress?: (progress: ProbeProgress) => void,
 ): Promise<ProbeResult[]> {
-  const results: ProbeResult[] = []
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i]
-    if (candidate === undefined) continue
-    results.push(await probeOne(llm, candidate, options, signal))
-    onProgress?.({ done: i + 1, total: candidates.length })
+  const results: ProbeResult[] = new Array(candidates.length)
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? 5, candidates.length))
+  let next = 0
+  let done = 0
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = next++
+      const candidate = candidates[index]
+      if (candidate === undefined) return
+      results[index] = await probeOne(llm, candidate, options, signal)
+      done++
+      onProgress?.({ done, total: candidates.length })
+    }
   }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()))
   return results
 }

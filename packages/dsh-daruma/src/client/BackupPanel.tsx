@@ -3,7 +3,7 @@
  * the failover backup. Rendered inside a primitives Modal.
  */
 
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Modal, Pill, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CandidateView, DarumaApi, ProbeResultView, StatusView } from './api.ts'
 
@@ -38,6 +38,9 @@ const listStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
+  contain: 'content',
+  willChange: 'scroll-position',
+  overscrollBehavior: 'contain',
 }
 
 /** Shorten an error for inline display; full text rides the title tooltip. */
@@ -149,6 +152,9 @@ export function BackupPanel(props: {
     }
   }
 
+  // Stable callback so memoized CandidateRow props don't change every render.
+  const handleSetBackup = useCallback((model: string) => void setBackup(model), [provider])
+
   return (
     <Modal
       open
@@ -228,7 +234,7 @@ export function BackupPanel(props: {
                   result={resultMap.get(candidate.model)}
                   busy={busy === candidate.model}
                   t={t}
-                  onSetBackup={(model) => void setBackup(model)}
+                  onSetBackup={handleSetBackup}
                 />
               ))}
             </div>
