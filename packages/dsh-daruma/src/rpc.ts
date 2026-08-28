@@ -86,6 +86,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
               backup: backup ?? null,
               channels: deps.engine.listHealth(),
               failoverCount: deps.engine.failoverCount,
+              failoverHistory: deps.engine.history,
             },
           }
         }

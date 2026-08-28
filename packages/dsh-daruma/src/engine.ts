@@ -29,9 +29,19 @@ export interface ChannelHealthView {
   readonly failures: number
 }
 
+export interface FailoverRecord {
+  readonly from: string
+  readonly to: string
+  readonly reason: string
+  readonly at: number
+}
+
+const FAILOVER_HISTORY_LIMIT = 5
+
 export class RecoveryEngine {
   private readonly healths = new Map<ChannelId, ChannelHealth>()
   private failoverTotal = 0
+  private readonly failoverHistory: FailoverRecord[] = []
   private readonly clock: Clock
 
   constructor(
@@ -66,6 +76,15 @@ export class RecoveryEngine {
     this.store.save(plan.healthAfter)
     if (plan.verdict.kind === 'FAILOVER') {
       this.failoverTotal = plan.failoverCount
+      this.failoverHistory.push({
+        from: signal.channel,
+        to: plan.verdict.target.id,
+        reason: signal.code,
+        at: this.clock.nowMs(),
+      })
+      if (this.failoverHistory.length > FAILOVER_HISTORY_LIMIT) {
+        this.failoverHistory.shift()
+      }
     }
     return plan
   }
@@ -81,5 +100,10 @@ export class RecoveryEngine {
 
   get failoverCount(): number {
     return this.failoverTotal
+  }
+
+  /** Recent failovers, newest last (bounded). */
+  get history(): readonly FailoverRecord[] {
+    return this.failoverHistory
   }
 }

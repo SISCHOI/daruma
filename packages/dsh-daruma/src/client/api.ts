@@ -16,6 +16,7 @@ export interface StatusView {
   backup: { provider: string; model: string } | null
   channels: ChannelHealthView[]
   failoverCount: number
+  failoverHistory: Array<{ from: string; to: string; reason: string; at: number }>
 }
 
 export interface CandidateView {

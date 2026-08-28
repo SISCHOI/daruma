@@ -76,6 +76,14 @@ export function StatusDock(props: { api: DarumaApi; t: Translate }): React.JSX.E
               {t('failoverCount')}: {status.failoverCount}
             </span>
           )}
+          {status.failoverHistory.length > 0 && (() => {
+            const last = status.failoverHistory[status.failoverHistory.length - 1]
+            return last !== undefined ? (
+              <span style={metaStyle} title={`${t('lastFailover')}: ${last.from} → ${last.to} (${last.reason})`}>
+                {t('lastFailover')}: {last.from} → {last.to}
+              </span>
+            ) : null
+          })()}
         </>
       )}
       <Button size="sm" variant="ghost" onClick={() => setPanelOpen(true)} title={t('backupManageHint')}>
