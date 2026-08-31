@@ -10,6 +10,7 @@ import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
 import type { StatusService } from './status.ts'
 import { probeCandidates, type Candidate } from './probe.ts'
+import { channelIdOf } from './mapping.ts'
 
 export type RpcResult =
   | { ok: true; value: unknown }
@@ -147,7 +148,13 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
             throw new Error('bad-request: testCandidates needs provider and at least one model')
           }
           const candidates: Candidate[] = models.map((model) => ({ provider, model }))
-          return { ok: true, value: await probeCandidates(llm, candidates, { timeoutMs: 30_000, concurrency: 6 }, signal) }
+          const results = await probeCandidates(llm, candidates, { timeoutMs: 30_000, concurrency: 6 }, signal)
+          // A successful probe closes the circuit for that tracked channel,
+          // so "tested available" shows as healthy in the status control.
+          for (const result of results) {
+            if (result.ok) deps.engine.onProbeSuccess(channelIdOf(result.provider, result.model))
+          }
+          return { ok: true, value: results }
         }
         case 'setBackup': {
           if (!isBackupPayload(payload)) throw new Error('bad-request: setBackup needs {provider, model}')

@@ -30,6 +30,8 @@ export interface ProbeResultView {
   model: string
   ok: boolean
   latencyMs: number
+  successCount?: number
+  attempts?: number
   error?: string
 }
 

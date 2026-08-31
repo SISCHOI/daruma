@@ -1,6 +1,10 @@
 /**
- * Model probing: send a minimal request to each candidate model and measure
+ * Model probing: send minimal requests to each candidate model and measure
  * availability and latency. Used by the "test backup channels" UI.
+ *
+ * Each model is probed several times (default 3) and marked ok only when at
+ * least half of the attempts succeed, so a single network blip cannot decide
+ * availability.
  *
  * This makes real provider calls — callers should confirm with the user and
  * keep the candidate list small.
@@ -16,13 +20,21 @@ export interface Candidate {
 
 export interface ProbeResult extends Candidate {
   readonly ok: boolean
+  /** Average latency of successful attempts (0 when all failed). */
   readonly latencyMs: number
+  /** Successful attempts out of `attempts`. */
+  readonly successCount: number
+  readonly attempts: number
   readonly error?: string
 }
 
 export interface ProbeOptions {
   readonly timeoutMs?: number
   readonly maxTokens?: number
+  /** Probe attempts per model; default 3. */
+  readonly attempts?: number
+  /** Minimum successful attempts to mark ok; default ceil(attempts/2). */
+  readonly minSuccess?: number
   /** Concurrent probes; sequential when 1. Default 5. */
   readonly concurrency?: number
 }
@@ -45,12 +57,13 @@ function probeMessage(): Message {
   }
 }
 
-async function probeOne(
+/** One single-attempt probe with a hard timeout race. */
+async function probeOnce(
   llm: LlmRuntime,
   candidate: Candidate,
   options: ProbeOptions,
   signal?: AbortSignal,
-): Promise<ProbeResult> {
+): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
   const started = Date.now()
   const maxTokens = options.maxTokens ?? 16
   const timeoutMs = options.timeoutMs ?? 30_000
@@ -59,8 +72,7 @@ async function probeOne(
 
   let timer: ReturnType<typeof setTimeout> | undefined
   // Hard timeout via race: some adapter streams ignore the abort signal and
-  // would otherwise hang `for await` forever (and stall the whole sequential
-  // probe). The race guarantees probeOne always settles.
+  // would otherwise hang `for await` forever (and stall the whole probe).
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort()
@@ -85,11 +97,43 @@ async function probeOne(
 
   try {
     const text = await Promise.race([collect, timeout])
-    return { ...candidate, ok: text.trim().length > 0, latencyMs: Date.now() - started }
+    return { ok: text.trim().length > 0, latencyMs: Date.now() - started }
   } catch (error) {
-    return { ...candidate, ok: false, latencyMs: Date.now() - started, error: messageOf(error) }
+    return { ok: false, latencyMs: Date.now() - started, error: messageOf(error) }
   } finally {
     if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+/** Probe one candidate `attempts` times; ok when at least `minSuccess` pass. */
+async function probeOne(
+  llm: LlmRuntime,
+  candidate: Candidate,
+  options: ProbeOptions,
+  signal?: AbortSignal,
+): Promise<ProbeResult> {
+  const attempts = options.attempts ?? 3
+  const minSuccess = options.minSuccess ?? Math.ceil(attempts / 2)
+  let successCount = 0
+  let latencySum = 0
+  let lastError: string | undefined
+  for (let i = 0; i < attempts; i++) {
+    const attempt = await probeOnce(llm, candidate, options, signal)
+    if (attempt.ok) {
+      successCount++
+      latencySum += attempt.latencyMs
+    } else {
+      lastError = attempt.error
+    }
+    if (signal?.aborted) break
+  }
+  return {
+    ...candidate,
+    ok: successCount >= minSuccess,
+    latencyMs: successCount > 0 ? Math.round(latencySum / successCount) : 0,
+    successCount,
+    attempts,
+    ...(lastError !== undefined && successCount === 0 ? { error: lastError } : {}),
   }
 }
 

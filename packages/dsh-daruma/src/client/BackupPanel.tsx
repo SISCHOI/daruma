@@ -99,10 +99,10 @@ const CandidateRow = memo(function CandidateRow(props: {
           <IconWarningOutline16 size={14} />
         </span>
       )}
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.model}</span>
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.model}</span>
       {result !== undefined && (
         <span style={noteStyle} title={result.error}>
-          {result.ok ? t('resultOk') : t('resultFail')} · {result.latencyMs}ms
+          {result.ok ? t('resultOk') : t('resultFail')} · {result.successCount ?? 1}/{result.attempts ?? 1} · {result.latencyMs}ms
           {!result.ok && result.error !== undefined ? ` · ${shortError(result.error)}` : ''}
         </span>
       )}

@@ -83,7 +83,9 @@ export function StatusDock(props: { api: DarumaApi; t: Translate }): React.JSX.E
         style={controlStyle}
       >
         <StatusIcon state={overallState(status)} />
-        <span>{t('backup')}: {backupLabel}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {t('backup')}: {backupLabel}
+        </span>
       </Button>
       {panelOpen && (
         <BackupPanel
