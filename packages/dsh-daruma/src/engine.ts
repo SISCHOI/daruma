@@ -10,7 +10,6 @@
 import {
   decide,
   freshHealth,
-  recordSuccess,
   type Channel,
   type ChannelHealth,
   type ChannelHealthStore,
@@ -106,18 +105,6 @@ export class RecoveryEngine {
   /** Configured failover channels (for provider discovery). */
   get channels(): readonly Channel[] {
     return this.config.channels
-  }
-
-  /**
-   * A successful active probe closes the circuit for that channel (if
-   * tracked), so "tested available" is reflected in the status control.
-   */
-  onProbeSuccess(channel: ChannelId): void {
-    const current = this.healths.get(channel)
-    if (current === undefined) return
-    const updated = recordSuccess(current, this.clock.nowMs())
-    this.healths.set(channel, updated)
-    this.store.save(updated)
   }
 
   /** Recent failovers, newest last (bounded). */

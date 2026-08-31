@@ -12,8 +12,8 @@
  * owns same-channel retry and delegates here (via `next()`) when it gives up,
  * so daruma only escalates after retry has exhausted its budget.
  *
- * Additionally mounts the `/dsh-daruma` RPC channel (status, model probing,
- * backup selection) for the web client UI, and appends a durable
+ * Additionally mounts the `/dsh-daruma` RPC channel (status, candidate
+ * discovery, backup selection) for the web client UI, and appends a durable
  * `daruma/failover` session event on every channel switch.
  */
 

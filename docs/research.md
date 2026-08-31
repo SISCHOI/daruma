@@ -82,7 +82,7 @@ daruma-core（纯域层，零运行时依赖）
 | dsh-daruma 20 单测 | ✅ |
 | dsh-daruma 实机启动（独立 profile @ 3081，HTTP 200，无未解析服务） | ✅ |
 | **dsh-daruma 端到端 failover**（mock LLM：mock-a 429 → 自动切 mock-b → 任务完成，exit 0） | ✅ |
-| **/dsh-daruma RPC 挂载**（status / listCandidates / testCandidates / setBackup） | ✅ 3081 实机启动无错 |
+| **/dsh-daruma RPC 挂载**（status / listCandidates / setBackup） | ✅ 3081 实机启动无错 |
 | **client bundle 加载**（`/plugins/dsh-daruma/client.js` serve 200） | ✅ |
 | 状态条 / 备用面板的浏览器交互（需人工打开 3081 确认视觉） | ⏳ 代码与加载已验证，视觉待用户确认 |
 | 完整 conversation node 会话流事件行 | ⏳ 简化为状态条「最近切换」显示，完整版记入后续 |

@@ -1,6 +1,6 @@
 /**
- * `/dsh-daruma` RPC channel: status snapshot, candidate discovery, model
- * probing, and backup-channel management for the client UI.
+ * `/dsh-daruma` RPC channel: status snapshot, candidate discovery, and
+ * backup-channel management for the client UI.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -9,7 +9,6 @@ import type { SettingsProvider, SettingsNamespace } from '@deepseek-ai/dsh-setti
 import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
 import type { StatusService } from './status.ts'
-import { probeCandidates, type Candidate } from './probe.ts'
 import { channelIdOf } from './mapping.ts'
 
 export type RpcResult =
@@ -34,17 +33,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string'
-}
-
-/** `{ provider?, models? }` — candidates to probe. */
-function isProbePayload(value: unknown): value is { provider?: string; models?: string[] } {
-  if (!isRecord(value)) return false
-  if (value.provider !== undefined && !isString(value.provider)) return false
-  if (value.models !== undefined) {
-    if (!Array.isArray(value.models)) return false
-    for (const model of value.models) if (!isString(model)) return false
-  }
-  return true
 }
 
 /** `{ provider, model }` — a backup selection. */
@@ -78,11 +66,16 @@ function knownProviders(deps: RpcDeps): string[] {
  * Discover candidate models for a provider: the adapter's model directory
  * first, then the `llm-pi-ai` settings section as a fallback.
  */
+interface CandidateEntry {
+  readonly provider: string
+  readonly model: string
+}
+
 async function listCandidates(
   llm: LlmRuntime,
   provider: string,
   settings?: SettingsProvider,
-): Promise<Candidate[]> {
+): Promise<CandidateEntry[]> {
   try {
     const models: LlmModelInfo[] = await llm.listModels(provider)
     if (models.length > 0) return models.map((info) => ({ provider, model: info.id }))
@@ -137,24 +130,6 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
           const llm = deps.getLlm()
           if (llm === undefined) throw new Error('llm service unavailable')
           return { ok: true, value: await listCandidates(llm, provider, deps.getSettings()) }
-        }
-        case 'testCandidates': {
-          if (!isProbePayload(payload)) throw new Error('bad-request: testCandidates payload is invalid')
-          const llm = deps.getLlm()
-          if (llm === undefined) throw new Error('llm service unavailable')
-          const provider = payload.provider ?? ''
-          const models = payload.models ?? []
-          if (provider === '' || models.length === 0) {
-            throw new Error('bad-request: testCandidates needs provider and at least one model')
-          }
-          const candidates: Candidate[] = models.map((model) => ({ provider, model }))
-          const results = await probeCandidates(llm, candidates, { timeoutMs: 30_000, concurrency: 6 }, signal)
-          // A successful probe closes the circuit for that tracked channel,
-          // so "tested available" shows as healthy in the status control.
-          for (const result of results) {
-            if (result.ok) deps.engine.onProbeSuccess(channelIdOf(result.provider, result.model))
-          }
-          return { ok: true, value: results }
         }
         case 'setBackup': {
           if (!isBackupPayload(payload)) throw new Error('bad-request: setBackup needs {provider, model}')

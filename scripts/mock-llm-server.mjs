@@ -16,10 +16,6 @@ import { createServer } from 'node:http'
 
 const PORT = Number(process.argv[2] ?? 3099)
 const FAIL_MODEL = process.env.FAIL_MODEL ?? 'mock-a'
-/** Optional per-request delay in ms, to observe concurrency. */
-const DELAY_MS = Number(process.env.DELAY_MS ?? 0)
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -68,11 +64,6 @@ function handleChatCompletions(req, res, body) {
       choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
     })
-  }
-
-  if (DELAY_MS > 0) {
-    void sleep(DELAY_MS).then(respond)
-    return
   }
   return respond()
 }

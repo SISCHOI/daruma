@@ -25,16 +25,6 @@ export interface CandidateView {
   model: string
 }
 
-export interface ProbeResultView {
-  provider: string
-  model: string
-  ok: boolean
-  latencyMs: number
-  successCount?: number
-  attempts?: number
-  error?: string
-}
-
 export interface RpcResult<T = unknown> {
   ok: boolean
   value?: T
@@ -47,7 +37,6 @@ export type Rpc = (endpoint: string, payload?: unknown) => Promise<RpcResult>
 export interface DarumaApi {
   status(): Promise<StatusView>
   listCandidates(provider: string): Promise<CandidateView[]>
-  testCandidates(provider: string, models: string[]): Promise<ProbeResultView[]>
   setBackup(provider: string, model: string): Promise<void>
   clearBackup(): Promise<void>
 }
@@ -64,7 +53,6 @@ export function createApi(rpc: Rpc): DarumaApi {
   return {
     status: () => call<StatusView>('status'),
     listCandidates: (provider) => call<CandidateView[]>('listCandidates', { provider }),
-    testCandidates: (provider, models) => call<ProbeResultView[]>('testCandidates', { provider, models }),
     setBackup: async (provider, model) => {
       await call<{ ok: boolean }>('setBackup', { provider, model })
     },
