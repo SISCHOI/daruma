@@ -1,7 +1,7 @@
 /**
  * dsh-daruma client: registers a compact channel-status dock above the
- * composer (conversation.input.dock) with a "backup channel" panel that can
- * probe candidate models and pick a backup. Built by tsdown into the
+ * composer (conversation.input.dock) with a "backup channel" panel that
+ * lists candidate models and picks a backup. Built by tsdown into the
  * __ModuleLoader__ factory bundle at lib/client.js.
  */
 
@@ -39,13 +39,15 @@ export const name = 'dsh-daruma'
 export const inject = ['slots', 'locale'] as const
 
 export function apply(ctx: ClientContext): void {
-  // Spin animation for loading glyphs (primitives icons are static SVGs).
+  // Widen the backup-panel dialog: the primitives Modal card is fixed at
+  // min(380px, 100%), which truncates long provider/model names. A global
+  // class (not a CSS module) outranks the module-scoped `.dialog` rule.
   if (typeof document !== 'undefined') {
-    const tagId = 'daruma-keyframes'
+    const tagId = 'daruma-panel-style'
     if (document.querySelector(`style[data-daruma="${tagId}"]`) === null) {
       const style = document.createElement('style')
       style.dataset.daruma = tagId
-      style.textContent = '@keyframes daruma-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }'
+      style.textContent = '.daruma-wide-dialog.daruma-wide-dialog { width: min(560px, 100%); }'
       document.head.appendChild(style)
     }
   }
