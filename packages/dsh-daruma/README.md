@@ -23,7 +23,9 @@ channel stays cooled-down across restarts.
 ## Install
 
 ```bash
-dsh plugin --profile web add github:<you>/daruma  # or a published dsh-daruma
+dsh plugin --profile web add dsh-daruma   # from npm
+# or from a checkout:
+dsh plugin --profile web add link:./packages/daruma-core link:./packages/dsh-daruma
 ```
 
 ## Configure

@@ -39,11 +39,11 @@ request → 429 → dsh-llm-retry (backoff, same channel)
 ## Install
 
 ```bash
-# local development (link the workspace packages)
-dsh plugin --profile web add link:./packages/daruma-core link:./packages/dsh-daruma
-
-# once published to npm:
+# from npm (daruma-core is pulled in automatically as a dependency)
 dsh plugin --profile web add dsh-daruma
+
+# or from a checkout (local development)
+dsh plugin --profile web add link:./packages/daruma-core link:./packages/dsh-daruma
 ```
 
 ## Configure
