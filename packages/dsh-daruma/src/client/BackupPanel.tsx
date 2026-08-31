@@ -69,15 +69,23 @@ function shortError(message: string): string {
   return message.length > 36 ? `${message.slice(0, 33)}…` : message
 }
 
+/** Spin animation for the loading glyph (keyframes injected at client apply). */
+const loadingSpinStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  animation: 'daruma-spin 1s linear infinite',
+}
+
 /** One candidate row, memoized so per-model result updates only re-render it. */
 const CandidateRow = memo(function CandidateRow(props: {
   candidate: CandidateView
   result: ProbeResultView | undefined
   busy: boolean
+  testingOne: boolean
   t: Translate
   onSetBackup: (model: string) => void
+  onTestOne: (model: string) => void
 }): React.JSX.Element {
-  const { candidate, result, busy, t, onSetBackup } = props
+  const { candidate, result, busy, testingOne, t, onSetBackup, onTestOne } = props
   return (
     <div style={candidateRowStyle}>
       {result === undefined ? (
@@ -98,7 +106,18 @@ const CandidateRow = memo(function CandidateRow(props: {
           {!result.ok && result.error !== undefined ? ` · ${shortError(result.error)}` : ''}
         </span>
       )}
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onSetBackup(candidate.model)}>
+      <Button
+        size="sm"
+        variant="ghost"
+        title={t('testOne')}
+        disabled={busy || testingOne}
+        onClick={() => onTestOne(candidate.model)}
+      >
+        <span style={testingOne ? loadingSpinStyle : { display: 'inline-flex' }}>
+          {testingOne ? <IconLoadingOutline16 size={14} /> : <IconPlayOutline16 size={14} />}
+        </span>
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy || testingOne} onClick={() => onSetBackup(candidate.model)}>
         {busy ? t('testing') : t('setBackup')}
       </Button>
     </div>
@@ -117,6 +136,7 @@ export function BackupPanel(props: {
   const [results, setResults] = useState<ProbeResultView[] | null>(null)
   const [testing, setTesting] = useState(false)
   const [tested, setTested] = useState(0)
+  const [testingOne, setTestingOne] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -194,8 +214,26 @@ export function BackupPanel(props: {
     }
   }
 
-  // Stable callback so memoized CandidateRow props don't change every render.
+  /** Probe a single model and merge its result into the list. */
+  const testOne = async (model: string): Promise<void> => {
+    setTestingOne(model)
+    setError(null)
+    setNotice(null)
+    try {
+      const [result] = await api.testCandidates(provider, [model])
+      if (result !== undefined) {
+        setResults((prev) => [...(prev ?? []).filter((r) => r.model !== model), result])
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setTestingOne(null)
+    }
+  }
+
+  // Stable callbacks so memoized CandidateRow props don't change every render.
   const handleSetBackup = useCallback((model: string) => void setBackup(model), [provider])
+  const handleTestOne = useCallback((model: string) => void testOne(model), [provider])
 
   return (
     <Modal
@@ -264,7 +302,9 @@ export function BackupPanel(props: {
               <span>{t('candidates')} ({candidates.length})</span>
               <Button size="sm" variant="primary" onClick={() => void test()} disabled={testing || candidates.length === 0}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {testing ? <IconLoadingOutline16 size={14} /> : <IconPlayOutline16 size={14} />}
+                  <span style={testing ? loadingSpinStyle : { display: 'inline-flex' }}>
+                    {testing ? <IconLoadingOutline16 size={14} /> : <IconPlayOutline16 size={14} />}
+                  </span>
                   {testing ? `${t('testing')} ${tested}/${candidates.length}` : t('testAll')}
                 </span>
               </Button>
@@ -278,8 +318,10 @@ export function BackupPanel(props: {
                   candidate={candidate}
                   result={resultMap.get(candidate.model)}
                   busy={busy === candidate.model}
+                  testingOne={testingOne === candidate.model}
                   t={t}
                   onSetBackup={handleSetBackup}
+                  onTestOne={handleTestOne}
                 />
               ))}
             </div>

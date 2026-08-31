@@ -39,6 +39,17 @@ export const name = 'dsh-daruma'
 export const inject = ['slots', 'locale'] as const
 
 export function apply(ctx: ClientContext): void {
+  // Spin animation for loading glyphs (primitives icons are static SVGs).
+  if (typeof document !== 'undefined') {
+    const tagId = 'daruma-keyframes'
+    if (document.querySelector(`style[data-daruma="${tagId}"]`) === null) {
+      const style = document.createElement('style')
+      style.dataset.daruma = tagId
+      style.textContent = '@keyframes daruma-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }'
+      document.head.appendChild(style)
+    }
+  }
+
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-daruma: dictionaries')
   const t = ctx.locale.bind(NS)
   const connection = ctx.get('connection') as ConnectionLike | undefined
