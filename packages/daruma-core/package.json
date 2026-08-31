@@ -32,6 +32,15 @@
     "circuit-breaker",
     "coding-agent"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SISCHOI/daruma.git",
+    "directory": "packages/daruma-core"
+  },
+  "homepage": "https://github.com/SISCHOI/daruma#readme",
+  "bugs": {
+    "url": "https://github.com/SISCHOI/daruma/issues"
+  },
   "devDependencies": {
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

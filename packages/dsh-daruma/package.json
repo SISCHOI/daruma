@@ -51,6 +51,15 @@
     "failover",
     "resilience"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SISCHOI/daruma.git",
+    "directory": "packages/dsh-daruma"
+  },
+  "homepage": "https://github.com/SISCHOI/daruma#readme",
+  "bugs": {
+    "url": "https://github.com/SISCHOI/daruma/issues"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.7",
