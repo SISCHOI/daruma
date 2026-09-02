@@ -1,6 +1,6 @@
 {
   "name": "dsh-daruma",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Daruma resilience plugin for DeepSeek Harness — detects model-request failures and fails over to another channel to keep long tasks alive.",
   "type": "module",
   "license": "MIT",

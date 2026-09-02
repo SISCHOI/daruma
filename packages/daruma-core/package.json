@@ -1,6 +1,6 @@
 {
   "name": "daruma-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pure domain layer for Daruma: failure classification, channel health (circuit breaker), and recovery policy decision engine. Zero Node runtime dependencies.",
   "type": "module",
   "license": "MIT",
