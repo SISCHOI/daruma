@@ -36,4 +36,17 @@ describe('resolveConfig', () => {
     expect(config.giveUpBudget).toBe(2)
     expect(config.stateFile).toBe('/tmp/daruma.json')
   })
+
+  it('rejects unsafe thresholds and malformed channels', () => {
+    expect(() => resolveConfig({ failureBudget: 0 })).toThrow(/failureBudget/)
+    expect(() => resolveConfig({ cooldownMs: Number.NaN })).toThrow(/cooldownMs/)
+    expect(() => resolveConfig({ channels: [{ provider: '', model: 'x' }] })).toThrow(/channel/)
+    expect(() => resolveConfig({
+      channels: [
+        { provider: 'mt', model: 'x' },
+        { provider: 'mt', model: 'x' },
+      ],
+    })).toThrow(/duplicate/)
+    expect(() => resolveConfig([] as never)).toThrow(/expected an object/)
+  })
 })

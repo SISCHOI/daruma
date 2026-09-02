@@ -64,6 +64,11 @@ describe('channel health state machine', () => {
     expect(h.cooldownUntilMs).toBe(0)
   })
 
+  it('allows routing while a probe is in flight until a success/failure hook resolves it', () => {
+    const h = beginProbe(trip(freshHealth(CH, 0), 0, COOLDOWN), COOLDOWN)
+    expect(canRouteNow(h, COOLDOWN)).toBe(true)
+  })
+
   it('PROBE → failure re-opens the circuit', () => {
     let h = freshHealth(CH, 0)
     h = trip(h, 0, COOLDOWN)

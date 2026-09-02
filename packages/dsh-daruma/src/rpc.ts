@@ -9,7 +9,6 @@ import type { SettingsProvider, SettingsNamespace } from '@deepseek-ai/dsh-setti
 import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
 import type { StatusService } from './status.ts'
-import { channelIdOf } from './mapping.ts'
 
 export type RpcResult =
   | { ok: true; value: unknown }
@@ -35,10 +34,14 @@ function isString(value: unknown): value is string {
   return typeof value === 'string'
 }
 
+function isIdentifier(value: unknown): value is string {
+  return isString(value) && value.trim() !== '' && value.length <= 256
+}
+
 /** `{ provider, model }` — a backup selection. */
 function isBackupPayload(value: unknown): value is { provider: string; model: string } {
-  return isRecord(value) && isString(value.provider) && value.provider !== ''
-    && isString(value.model) && value.model !== ''
+  return isRecord(value) && isIdentifier(value.provider)
+    && isIdentifier(value.model)
 }
 
 /** The `llm-pi-ai` settings section shape (providers → models). */
@@ -105,7 +108,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
     | undefined
   if (connection === undefined) return // no web transport (headless)
 
-  const dispatch = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
+  const dispatch = async (endpoint: string, payload: unknown, _signal: AbortSignal): Promise<RpcResult> => {
     try {
       switch (endpoint) {
         case 'status': {
@@ -125,7 +128,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
           }
         }
         case 'listCandidates': {
-          const provider = isRecord(payload) && isString(payload.provider) ? payload.provider : undefined
+          const provider = isRecord(payload) && isIdentifier(payload.provider) ? payload.provider : undefined
           if (provider === undefined) throw new Error('bad-request: listCandidates needs a provider')
           const llm = deps.getLlm()
           if (llm === undefined) throw new Error('llm service unavailable')
