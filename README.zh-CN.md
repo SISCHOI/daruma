@@ -43,7 +43,7 @@ dsh plugin --profile web add dsh-daruma
       - { provider: mt, model: glm-5.2 }
     failureBudget: 3
     cooldownMs: 30000
-    giveUpBudget: 8
+    giveUpBudget: 8       # 每个 agent 的故障转移预算
 ```
 
 当 `deepseek-v4-pro` 开始回 `429`，daruma 熔断它、改用 `glm-5.2` 继续。渠道健康状态落到 `~/.dsh/daruma/channel-health.json`，被熔断的渠道在重启后依然保持冷却。

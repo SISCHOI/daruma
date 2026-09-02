@@ -64,7 +64,7 @@ daruma-core（纯域层，零运行时依赖）
 ### ADR-005 熔断状态机
 
 - 状态：`HEALTHY → COOLDOWN → PROBE → HEALTHY`。
-- 不变量：COOLDOWN 期间不路由；连续失败达预算熔断；`QUOTA`/`INVALID_CREDENTIAL`/`CONTEXT_WINDOW_EXCEEDED` 直接熔断（retry 无意义）；全局 `giveUpBudget` 耗尽 → `GIVE_UP` 终态。
+- 不变量：COOLDOWN 期间不路由；连续失败达预算熔断；`QUOTA`/`INVALID_CREDENTIAL`/`CONTEXT_WINDOW_EXCEEDED` 直接熔断（retry 无意义）；每个 agent/session 的 `giveUpBudget` 耗尽 → `GIVE_UP` 终态。当前宿主没有 request-success 事件，因此 PROBE 仅保留为域状态，适配器不主动持久化半开状态。
 - 渠道健康经 `ChannelHealthStore` 落盘（`~/.dsh/daruma/channel-health.json`），跨重启记住熔断。
 
 ### ADR-006 备用渠道与状态 UI

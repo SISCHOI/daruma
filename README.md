@@ -59,7 +59,7 @@ Add a failover chain to your profile's `cordis.patch.yml`:
       - { provider: mt, model: glm-5.2 }
     failureBudget: 3      # consecutive failures before a channel trips
     cooldownMs: 30000     # how long a tripped channel stays in cooldown
-    giveUpBudget: 8       # total failure budget before giving up the request
+    giveUpBudget: 8       # per-agent failover budget before giving up
 ```
 
 When `deepseek-v4-pro` starts returning `429`, daruma trips it and continues on `glm-5.2`.
@@ -75,7 +75,7 @@ Then open the web UI → click the channel-status dock (next to the model select
 
 ## Status
 
-- 43 unit tests (`daruma-core` 27 + `dsh-daruma 16`), all green
+- 48 unit tests (`daruma-core` 28 + `dsh-daruma 20`), all green
 - End-to-end failover verified: mock `429` on primary → automatic switch → task completes (see [`docs/e2e-test.md`](./docs/e2e-test.md))
 - Running in production on the author's DSH web instance
 
@@ -84,7 +84,7 @@ Then open the web UI → click the channel-status dock (next to the model select
 ```bash
 pnpm install
 pnpm build
-pnpm test        # 43 tests across both packages
+pnpm test        # 48 tests across both packages
 ```
 
 ## Why "daruma"
@@ -152,7 +152,7 @@ dsh plugin --profile web add dsh-daruma
       - { provider: mt, model: glm-5.2 }
     failureBudget: 3      # 连续失败几次后渠道跳闸
     cooldownMs: 30000     # 跳闸渠道冷却多久
-    giveUpBudget: 8       # 放弃请求前的总失败预算
+    giveUpBudget: 8       # 每个 agent 放弃请求前的故障转移预算
 ```
 
 当 `deepseek-v4-pro` 开始返回 `429`，daruma 跳闸它并继续用 `glm-5.2`。
@@ -168,7 +168,7 @@ dsh plugin --profile web add dsh-daruma
 
 ## 状态
 
-- 43 个单元测试（`daruma-core` 27 + `dsh-daruma` 16），全绿
+- 48 个单元测试（`daruma-core` 28 + `dsh-daruma` 20），全绿
 - 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）
 - 已在作者的 DSH web 实例生产运行
 
@@ -177,7 +177,7 @@ dsh plugin --profile web add dsh-daruma
 ```bash
 pnpm install
 pnpm build
-pnpm test        # 两个包共 43 个测试
+pnpm test        # 两个包共 48 个测试
 ```
 
 ## 为什么叫 "daruma"

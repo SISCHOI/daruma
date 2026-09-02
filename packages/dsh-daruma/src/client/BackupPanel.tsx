@@ -75,16 +75,17 @@ const candidateRowStyle: React.CSSProperties = {
 const CandidateRow = memo(function CandidateRow(props: {
   candidate: CandidateView
   isBackup: boolean
+  busy: boolean
   t: Translate
   onSetBackup: (model: string) => void
 }): React.JSX.Element {
-  const { candidate, isBackup, t, onSetBackup } = props
+  const { candidate, isBackup, busy, t, onSetBackup } = props
   return (
     <div style={candidateRowStyle}>
       <span style={{ width: 14, flexShrink: 0 }} />
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.model}</span>
       {isBackup && <Pill active>{t('currentBackupMark')}</Pill>}
-      <Button size="sm" variant="ghost" disabled={isBackup} onClick={() => onSetBackup(candidate.model)}>
+      <Button size="sm" variant="ghost" disabled={isBackup || busy} onClick={() => onSetBackup(candidate.model)}>
         {t('setBackup')}
       </Button>
     </div>
@@ -153,12 +154,15 @@ export function BackupPanel(props: {
   }
 
   const clearBackup = async (): Promise<void> => {
+    setBusy('__clear__')
     setError(null)
     try {
       await api.clearBackup()
       setBackupOverride(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -196,7 +200,7 @@ export function BackupPanel(props: {
                 {backupShown.provider}/{backupShown.model}
               </span>
             </Pill>
-            <Button size="sm" variant="ghost" style={{ flexShrink: 0 }} onClick={() => void clearBackup()}>{t('clearBackup')}</Button>
+            <Button size="sm" variant="ghost" style={{ flexShrink: 0 }} disabled={busy !== null} onClick={() => void clearBackup()}>{t('clearBackup')}</Button>
           </div>
         )}
 
@@ -239,6 +243,7 @@ export function BackupPanel(props: {
                   key={candidate.model}
                   candidate={candidate}
                   isBackup={candidate.model === backupModel}
+                  busy={busy !== null}
                   t={t}
                   onSetBackup={handleSetBackup}
                 />
