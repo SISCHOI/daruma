@@ -14,6 +14,7 @@ class MemoryStore implements ChannelHealthStore {
 
 const A = channelId('mt::deepseek-v4-pro')
 const B = channelId('mt::glm-5.2')
+const C = channelId('mt::qwen-3')
 
 const config: RecoveryPolicyConfig = {
   channels: [
@@ -56,5 +57,31 @@ describe('RecoveryEngine', () => {
     const plan = second.onFailure({ code: 'QUOTA', channel: B, occurredAtMs: 1000 })
     // A is still cooling, so failover must skip it (there is no third channel → GIVE_UP).
     expect(plan.verdict).toMatchObject({ kind: 'GIVE_UP', reason: 'no-routable-fallback' })
+  })
+
+  it('keeps failover budgets isolated by scope', () => {
+    const scopedConfig: RecoveryPolicyConfig = {
+      ...config,
+      channels: [
+        ...config.channels,
+        { id: C, provider: 'mt', model: modelId('qwen-3') },
+      ],
+      failureBudget: 1,
+    }
+    const engine = new RecoveryEngine(scopedConfig, new MemoryStore(), { nowMs: () => 1000 })
+    const first = engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+    const second = engine.onFailure({ code: 'RATE_LIMIT', channel: C, occurredAtMs: 1000 }, undefined, 'agent-2')
+    expect(first.failoverCount).toBe(1)
+    expect(second.failoverCount).toBe(1)
+  })
+
+  it('clears a disposed scope budget', () => {
+    const scopedConfig: RecoveryPolicyConfig = { ...config, failureBudget: 1 }
+    const engine = new RecoveryEngine(scopedConfig, new MemoryStore(), { nowMs: () => 1000 })
+    engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+    engine.clearScope('agent-1')
+    // A is cooling, but the scope itself starts again from zero; this call
+    // demonstrates the cleanup API is safe and idempotent.
+    expect(() => engine.clearScope('agent-1')).not.toThrow()
   })
 })

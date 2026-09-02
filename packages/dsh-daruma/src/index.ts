@@ -82,7 +82,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   ctx.on('agent/request-error', async (payload, next): Promise<RequestErrorAction> => {
     const channel = currentChannel.get(payload.agent.id) ?? channelIdOf(payload.provider, '')
     const signal = toFailureSignal(payload.failure, channel, Date.now())
-    const plan = engine.onFailure(signal, backupChannel())
+    const plan = engine.onFailure(signal, backupChannel(), payload.agent.id)
 
     if (plan.verdict.kind === 'FAILOVER') {
       pending.set(payload.agent.id, plan.verdict.target)
@@ -100,6 +100,12 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
     // RETRY_NOW / GIVE_UP: delegate downstream (retry may still own it).
     return next()
+  })
+
+  ctx.on('agent/disposed', ({ agent }) => {
+    currentChannel.delete(agent.id)
+    pending.delete(agent.id)
+    engine.clearScope(agent.id)
   })
 
   mountRpc(ctx, { engine, currentChannel, status, getLlm: () => ctx.llm, getSettings: () => ctx.settings })

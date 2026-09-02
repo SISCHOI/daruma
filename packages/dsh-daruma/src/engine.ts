@@ -2,7 +2,7 @@
  * RecoveryEngine — the adapter-side state holder that wraps the pure
  * `decide()` from daruma-core.
  *
- * It owns the mutable channel-health map, the per-session failover counter,
+ * It owns the mutable channel-health map and per-scope failover counters,
  * and persistence through a `ChannelHealthStore`. All decision logic stays in
  * daruma-core; this class only threads state and I/O.
  */
@@ -41,6 +41,7 @@ const FAILOVER_HISTORY_LIMIT = 5
 export class RecoveryEngine {
   private readonly healths = new Map<ChannelId, ChannelHealth>()
   private failoverTotal = 0
+  private readonly failoversByScope = new Map<string, number>()
   private readonly failoverHistory: FailoverRecord[] = []
   private readonly clock: Clock
 
@@ -62,12 +63,14 @@ export class RecoveryEngine {
     }
   }
 
-  /** Feed one failure signal and persist the resulting state. */
-  onFailure(signal: FailureSignal, preferred?: Channel): RecoveryPlan {
+  /** Feed one failure signal and persist the resulting state. `scope` should
+   * identify an agent/session so independent tasks do not share a budget. */
+  onFailure(signal: FailureSignal, preferred?: Channel, scope = 'global'): RecoveryPlan {
+    const scopedCount = this.failoversByScope.get(scope) ?? 0
     const plan = decide({
       signal,
       healths: this.healths,
-      failoverCount: this.failoverTotal,
+      failoverCount: scopedCount,
       config: this.config,
       nowMs: this.clock.nowMs(),
       ...(preferred !== undefined ? { preferred } : {}),
@@ -75,7 +78,8 @@ export class RecoveryEngine {
     this.healths.set(signal.channel, plan.healthAfter)
     this.store.save(plan.healthAfter)
     if (plan.verdict.kind === 'FAILOVER') {
-      this.failoverTotal = plan.failoverCount
+      this.failoversByScope.set(scope, plan.failoverCount)
+      this.failoverTotal += 1
       this.failoverHistory.push({
         from: signal.channel,
         to: plan.verdict.target.id,
@@ -87,6 +91,11 @@ export class RecoveryEngine {
       }
     }
     return plan
+  }
+
+  /** Release per-agent/session counters when the host disposes the scope. */
+  clearScope(scope: string): void {
+    this.failoversByScope.delete(scope)
   }
 
   /** Snapshot of every tracked channel's health, for the status UI. */
