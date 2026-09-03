@@ -17,6 +17,7 @@
 - **Automatic failover.** When the current model/channel trips after repeated failures (or hits a terminal error like `QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`), daruma switches the *next* request to another channel in your configured chain. The in-flight generation continues on the new channel — no lost sessions.
 - **Circuit breaker with persistent state.** Each channel carries a health record (failures, cooldown, half-open probe). State persists to `~/.dsh/daruma/channel-health.json`, so a tripped channel stays cooled down across restarts.
 - **Backup channel UI.** A compact status dock next to the model selector shows overall health and your current backup. The backup panel lists candidate models per provider and lets you set/clear the backup channel manually — picked from real traffic, no synthetic speed tests.
+- **Live failover notices in the conversation.** When daruma switches channels mid-turn, the web UI renders a small `daruma` row right inside the chat flow (`mt::glm-5.3 failed (RATE_LIMIT) → trying deepseek-official::deepseek-v4-flash`, budget usage on hover) — recovery becomes visible without digging through logs. Live-only: out-of-repo session events are not persisted by the harness yet.
 - **Deterministic decision engine.** All recovery logic lives in a pure function package (`daruma-core`): same failure history + same channel state → same recovery plan. No I/O, fully unit-tested.
 
 ## How it works
