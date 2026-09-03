@@ -9,6 +9,8 @@ export interface ChannelHealthView {
   channel: string
   state: ChannelState
   failures: number
+  /** Epoch ms when the channel's cooldown ends; `0` when not cooling. */
+  cooldownUntilMs: number
 }
 
 export interface StatusView {

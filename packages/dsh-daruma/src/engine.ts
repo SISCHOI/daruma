@@ -27,6 +27,8 @@ export interface ChannelHealthView {
   readonly channel: ChannelId
   readonly state: ChannelState
   readonly failures: number
+  /** Epoch ms when the channel's cooldown ends; `0` when not cooling. */
+  readonly cooldownUntilMs: number
 }
 
 export interface FailoverRecord {
@@ -104,6 +106,7 @@ export class RecoveryEngine {
       channel: health.channel,
       state: health.state,
       failures: health.consecutiveFailures,
+      cooldownUntilMs: health.cooldownUntilMs,
     }))
   }
 

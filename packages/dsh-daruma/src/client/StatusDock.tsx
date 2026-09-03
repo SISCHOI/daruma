@@ -7,11 +7,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, IconCheckOutline16, IconWarningOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DarumaApi, StatusView } from './api.ts'
+import { overallState, type Dot } from './health.ts'
 import { BackupPanel } from './BackupPanel.tsx'
 
 type Translate = (key: string) => string
-
-type Dot = 'done' | 'warning' | 'ongoing' | 'error'
 
 const controlStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -21,14 +20,6 @@ const controlStyle: React.CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-}
-
-/** Overall health: any cooling channel → error, any probe → warning, else done. */
-function overallState(status: StatusView | null): Dot {
-  if (status === null) return 'ongoing'
-  if (status.channels.some((c) => c.state === 'COOLDOWN')) return 'error'
-  if (status.channels.some((c) => c.state === 'PROBE')) return 'warning'
-  return 'done'
 }
 
 const iconColor: Record<Dot, string> = {
@@ -82,7 +73,7 @@ export function StatusDock(props: { api: DarumaApi; t: Translate }): React.JSX.E
         onClick={() => setPanelOpen(true)}
         style={controlStyle}
       >
-        <StatusIcon state={overallState(status)} />
+        <StatusIcon state={overallState(status?.channels ?? null, Date.now())} />
         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {t('backup')}: {backupLabel}
         </span>

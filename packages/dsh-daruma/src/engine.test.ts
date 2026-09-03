@@ -45,6 +45,13 @@ describe('RecoveryEngine', () => {
     const engine = new RecoveryEngine(config, store, { nowMs: () => 1000 })
     engine.onFailure({ code: 'QUOTA', channel: A, occurredAtMs: 1000 })
     expect(store.map.get(A)?.state).toBe('COOLDOWN')
+    // The status view carries the cooldown deadline so the dock can tell
+    // "still cooling" from "cooldown already expired" without a success hook.
+    expect(engine.listHealth().find((h) => h.channel === A)).toMatchObject({
+      state: 'COOLDOWN',
+      failures: 1,
+      cooldownUntilMs: 1000 + config.cooldownMs,
+    })
   })
 
   it('restores persisted health on a new engine instance', () => {
