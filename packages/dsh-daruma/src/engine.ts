@@ -100,6 +100,16 @@ export class RecoveryEngine {
     this.failoversByScope.delete(scope)
   }
 
+  /** Scope's failover count so far (0 when never failed over). */
+  failoverCountFor(scope: string): number {
+    return this.failoversByScope.get(scope) ?? 0
+  }
+
+  /** Per-scope give-up budget from config. */
+  get giveUpBudget(): number {
+    return this.config.giveUpBudget
+  }
+
   /** Snapshot of every tracked channel's health, for the status UI. */
   listHealth(): ChannelHealthView[] {
     return [...this.healths.values()].map((health) => ({

@@ -24,6 +24,7 @@ import { channelIdOf, channelIdOfConfig, toCallConfig, toFailureSignal } from '.
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
+import { buildDarumaFailoverEvent, type DarumaFailoverEvent } from './failover-events.ts'
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
@@ -31,13 +32,7 @@ import { modelId, type Channel, type ChannelId } from 'daruma-core'
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
 
-/** Durable session event appended on every channel switch. */
-export interface DarumaFailoverEvent {
-  from: string
-  to: string
-  reason: string
-  at: number
-}
+export type { DarumaFailoverEvent }
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -86,10 +81,21 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
     if (plan.verdict.kind === 'FAILOVER') {
       pending.set(payload.agent.id, plan.verdict.target)
-      const eventData = { from: channel, to: plan.verdict.target.id, reason: signal.code, at: Date.now() }
-      payload.agent.session.append('daruma/failover', eventData)
+      const event = buildDarumaFailoverEvent({
+        from: channel,
+        to: plan.verdict.target.id,
+        reason: signal.code,
+        at: Date.now(),
+        agentId: payload.agent.id,
+        turn: payload.turn,
+        step: payload.step,
+        failure: payload.failure,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
+      payload.agent.session.append('daruma/failover', event)
       ctx.logger.warn(
-        `dsh-daruma: failover ${channel} -> ${plan.verdict.target.id} (${signal.code})`,
+        `dsh-daruma: failover ${channel} -> ${plan.verdict.target.id} (${signal.code}) agent=${payload.agent.id} turn=${payload.turn} step=${payload.step}`,
       )
       return { kind: 'retry' }
     }

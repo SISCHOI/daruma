@@ -91,4 +91,16 @@ describe('RecoveryEngine', () => {
     // demonstrates the cleanup API is safe and idempotent.
     expect(() => engine.clearScope('agent-1')).not.toThrow()
   })
+
+  it('reports the per-scope failover count and budget for tracing', () => {
+    const engine = new RecoveryEngine(
+      { ...config, failureBudget: 1 },
+      new MemoryStore(),
+      { nowMs: () => 1000 },
+    )
+    expect(engine.failoverCountFor('agent-1')).toBe(0)
+    engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+    expect(engine.failoverCountFor('agent-1')).toBe(1)
+    expect(engine.giveUpBudget).toBe(config.giveUpBudget)
+  })
 })
