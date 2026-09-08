@@ -24,7 +24,8 @@ import { channelIdOf, channelIdOfConfig, toCallConfig, toFailureSignal } from '.
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
-import { buildDarumaFailoverEvent, type DarumaFailoverEvent } from './failover-events.ts'
+import { JsonlFailoverLogStore } from './failover-log.ts'
+import { buildDarumaFailoverEvent, buildDarumaGiveUpEvent, type DarumaFailoverEvent, type DarumaGiveUpEvent } from './failover-events.ts'
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
@@ -32,11 +33,12 @@ import { modelId, type Channel, type ChannelId } from 'daruma-core'
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
 
-export type { DarumaFailoverEvent }
+export type { DarumaFailoverEvent, DarumaGiveUpEvent }
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     'daruma/failover': DarumaFailoverEvent
+    'daruma/give-up': DarumaGiveUpEvent
   }
 }
 
@@ -44,12 +46,29 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const config = resolveConfig(rawConfig)
   const store = new JsonFileChannelHealthStore(config.stateFile)
   const engine = new RecoveryEngine(config, store)
+  const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx)
+
+  // Boot record: one line per plugin start, so audits can align restart
+  // boundaries with the failover/give-up lines that follow.
+  failoverLog.append({
+    kind: 'boot',
+    t: Date.now(),
+    pid: process.pid,
+    channels: config.channels.map((channel) => channel.id),
+    failureBudget: config.failureBudget,
+    cooldownMs: config.cooldownMs,
+    giveUpBudget: config.giveUpBudget,
+  })
 
   // Per-agent channel currently in use (tracked from the last request).
   const currentChannel = new Map<string, ChannelId>()
   // Per-agent failover target armed on the previous failed request.
   const pending = new Map<string, Channel>()
+  // Agents whose latest request-attempt failed and has not been followed by a
+  // fresh request yet. `agent/pre-step` infers "the last request succeeded"
+  // only when the agent is absent here (see onSuccess wiring below).
+  const failedSinceRequest = new Set<string>()
 
   /** The user-chosen backup channel, if set and healthy. */
   const backupChannel = (): Channel | undefined => {
@@ -59,6 +78,8 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   }
 
   ctx.on('agent/request', async (payload, next) => {
+    // A new request attempt supersedes any recorded failure attribution.
+    failedSinceRequest.delete(payload.agent.id)
     const current: LlmCallConfig = await next()
     const armed = pending.get(payload.agent.id)
     if (armed) {
@@ -75,6 +96,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   })
 
   ctx.on('agent/request-error', async (payload, next): Promise<RequestErrorAction> => {
+    failedSinceRequest.add(payload.agent.id)
     const channel = currentChannel.get(payload.agent.id) ?? channelIdOf(payload.provider, '')
     const signal = toFailureSignal(payload.failure, channel, Date.now())
     const plan = engine.onFailure(signal, backupChannel(), payload.agent.id)
@@ -94,6 +116,19 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         giveUpBudget: engine.giveUpBudget,
       })
       payload.agent.session.append('daruma/failover', event)
+      failoverLog.append({
+        kind: 'failover',
+        t: event.at,
+        agentId: payload.agent.id,
+        from: channel,
+        to: plan.verdict.target.id,
+        reason: signal.code,
+        status: payload.failure.status,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
       ctx.logger.warn(
         `dsh-daruma: failover ${channel} -> ${plan.verdict.target.id} (${signal.code}) agent=${payload.agent.id} turn=${payload.turn} step=${payload.step}`,
       )
@@ -101,6 +136,29 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     }
 
     if (plan.verdict.kind === 'GIVE_UP') {
+      const giveUpEvent = buildDarumaGiveUpEvent({
+        from: channel,
+        reason: plan.verdict.reason === 'no-routable-fallback' ? 'no-routable-fallback' : 'give-up-budget-exhausted',
+        at: Date.now(),
+        agentId: payload.agent.id,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
+      payload.agent.session.append('daruma/give-up', giveUpEvent)
+      failoverLog.append({
+        kind: 'give-up',
+        t: giveUpEvent.at,
+        agentId: payload.agent.id,
+        from: channel,
+        reason: giveUpEvent.reason,
+        status: payload.failure.status,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
       ctx.logger.error(`dsh-daruma: giving up (${plan.verdict.reason})`)
     }
 
@@ -108,9 +166,46 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return next()
   })
 
+  // The host exposes no request-success event. Two adjacent host events prove
+  // "the previous model request completed without erroring":
+  //   1. `agent/pre-step` — the loop proposes the next step;
+  //   2. `agent/turn-stopping` — the turn is about to close.
+  // At either point, `currentChannel` still names the channel of the last
+  // request, so it earns a success record — unless a failure is still
+  // un-attributed (`failedSinceRequest`), which gates the false-positive
+  // where the turn died on an error and never sent another request.
+  // The turn-stopping arm is what makes single-step tasks (headless one-shot
+  // prompts) reset health: their only pre-step fires before any request.
+  // Never blocks the host loop: errors are logged and swallowed; the
+  // pre-step waterfall always calls through.
+  const recordInferredSuccess = (agentId: string): void => {
+    const channel = currentChannel.get(agentId)
+    if (channel !== undefined && !failedSinceRequest.has(agentId)) {
+      engine.onSuccess(channel)
+    }
+  }
+
+  ctx.on('agent/pre-step', async (payload, next) => {
+    try {
+      recordInferredSuccess(payload.agent.id)
+    } catch (error) {
+      ctx.logger.warn(`dsh-daruma: success recording failed: ${String(error)}`)
+    }
+    return next()
+  })
+
+  ctx.on('agent/turn-stopping', ({ agent }) => {
+    try {
+      recordInferredSuccess(agent.id)
+    } catch (error) {
+      ctx.logger.warn(`dsh-daruma: success recording failed: ${String(error)}`)
+    }
+  })
+
   ctx.on('agent/disposed', ({ agent }) => {
     currentChannel.delete(agent.id)
     pending.delete(agent.id)
+    failedSinceRequest.delete(agent.id)
     engine.clearScope(agent.id)
   })
 

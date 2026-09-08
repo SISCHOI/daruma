@@ -25,6 +25,10 @@ export const zh = {
   currentBackupMark: '备用',
   noCandidates: '未加载到候选模型',
   empty: '暂无渠道数据',
+  failoverNoticeLine: '{from} 请求失败（{reason}）→ 本次尝试 {to}',
+  failoverNoticeDetail: '第 {count}/{budget} 次失败切换 · turn {turn} step {step}',
+  failoverGiveUpLine: '{from} 请求失败（{reason}）→ 已用尽恢复手段，停止重试',
+  failoverGiveUpDetail: '失败切换 {count}/{budget} · turn {turn} step {step}',
 }
 
 export const en = {
@@ -52,4 +56,8 @@ export const en = {
   currentBackupMark: 'backup',
   noCandidates: 'No candidates loaded',
   empty: 'No channel data yet',
+  failoverNoticeLine: '{from} failed ({reason}) → trying {to}',
+  failoverNoticeDetail: 'failover {count}/{budget} · turn {turn} step {step}',
+  failoverGiveUpLine: '{from} failed ({reason}) → recovery budget exhausted, giving up',
+  failoverGiveUpDetail: 'failovers {count}/{budget} · turn {turn} step {step}',
 }

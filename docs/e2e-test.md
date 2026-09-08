@@ -74,10 +74,16 @@ agent-default-model:
       - { provider: mock, model: mock-a }
       - { provider: mock, model: mock-b }
     failureBudget: 1
+    # REQUIRED: isolate the state file (and its sibling failover log) from
+    # production. Without this, mock channels pollute
+    # ~/.dsh/daruma/channel-health.json and future audits read fake entries.
+    stateFile: C:/Users/<you>/.dsh/profiles/daruma-headless/channel-health.json
 ```
 
 The `settings.path` points at the profile-local file, so the global
-`~/.dsh/settings.yaml` is never touched.
+`~/.dsh/settings.yaml` is never touched. The `stateFile` likewise keeps the
+plugin's persisted health (and, since 0.1.4, the `failover-log.jsonl` written
+next to it) inside the test profile instead of `~/.dsh/daruma/`.
 
 ## 3. Run the task
 
@@ -93,3 +99,21 @@ log shows the failover sequence:
 [mock] request model=mock-a stream=true -> 429
 [mock] request model=mock-b stream=true -> 200
 ```
+
+## 4. Post-run assertions
+
+After the task completes, verify three things:
+
+1. **Production isolation.** `~/.dsh/daruma/channel-health.json` is unchanged
+   (no `mock::` entries appeared; mock channels live only in the profile-local
+   `stateFile`).
+2. **Durable failover log.** The profile-local `failover-log.jsonl` (sibling of
+   the configured `stateFile`) contains a `kind:"boot"` line and a
+   `kind:"failover"` line with `"from":"mock::mock-a"`, `"to":"mock::mock-b"`,
+   `"reason":"RATE_LIMIT"`.
+3. **Success reset.** Run the task once more — this time with the primary
+   healthy (restart the mock server so `mock-a` returns 200, or point
+   `agent-default-model` at `mock-a` with a healthy server). After it
+   completes, the profile-local `channel-health.json` shows `mock-a` back at
+   `HEALTHY` with `consecutiveFailures: 0` — the `agent/pre-step` success hook
+   closed the circuit that the first run had tripped.

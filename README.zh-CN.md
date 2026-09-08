@@ -46,7 +46,7 @@ dsh plugin --profile web add dsh-daruma
     giveUpBudget: 8       # 每个 agent 的故障转移预算
 ```
 
-当 `deepseek-v4-pro` 开始回 `429`，daruma 熔断它、改用 `glm-5.2` 继续。渠道健康状态落到 `~/.dsh/daruma/channel-health.json`，被熔断的渠道在重启后依然保持冷却。
+当 `deepseek-v4-pro` 开始回 `429`，daruma 熔断它、改用 `glm-5.2` 继续。渠道健康状态落到 `~/.dsh/daruma/channel-health.json`，被熔断的渠道在重启后依然保持冷却；成功请求会自动闭合断路器（由下一个 `agent/pre-step` 推断）。每次切换/放弃决策同时追加到 `~/.dsh/daruma/failover-log.jsonl`，可事后审计。
 
 ## 为什么叫 daruma
 
@@ -54,9 +54,9 @@ dsh plugin --profile web add dsh-daruma
 
 ## 当前状态
 
-已实现并测试：37 个单测，外加一次端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+已实现并测试：82 个单测（`daruma-core` 28 + `dsh-daruma` 54），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
 
-尚未发布到 npm。
+已发布到 npm：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)。
 
 ## 开发
 

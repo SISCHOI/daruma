@@ -1,11 +1,13 @@
 /**
  * Time-aware channel-health classification for the status dock.
  *
- * The host exposes no request-success event, so a channel whose cooldown has
- * expired keeps its `COOLDOWN` state field forever — it becomes routable again
- * (`canRouteNow`) without ever flipping back to `HEALTHY`. The dock therefore
- * must judge by time, not by the raw state field: only a channel that is
- * *still* cooling (cooldown not yet expired) counts as an error.
+ * The adapter now records successes (inferred from `agent/pre-step`), which
+ * resets a channel to HEALTHY on its first successful request. But a channel
+ * that never routes again (removed from the chain, one-shot backup) keeps its
+ * last persisted state forever — including a stale COOLDOWN whose deadline
+ * has long passed. The dock therefore still judges by time, not by the raw
+ * state field: only a channel that is *still* cooling (cooldown not yet
+ * expired) counts as an error.
  */
 
 import type { ChannelHealthView } from './api.ts'

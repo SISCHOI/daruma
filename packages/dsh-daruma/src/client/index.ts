@@ -9,6 +9,12 @@ import { createElement as h } from 'react'
 import { en, zh } from './locales.ts'
 import { createApi, type Rpc, type RpcResult } from './api.ts'
 import { StatusDock } from './StatusDock.tsx'
+import {
+  createFailoverNoticeDefinition,
+  FAILOVER_NOTICE_KIND,
+  type ConversationDefinitionLike,
+} from './failover-notice.ts'
+import { FailoverNoticeRow } from './FailoverNoticeRow.tsx'
 
 const NS = 'daruma'
 
@@ -33,6 +39,53 @@ interface ConnectionLike {
   rpc: {
     call(channel: string, endpoint: string, payload: unknown): Promise<unknown>
   }
+}
+
+/**
+ * Host conversation-event registry surface (`ctx.get('conversationEvents')`),
+ * structurally typed — the real service comes from the web client runtime.
+ */
+interface ConversationEventsLike {
+  register(definition: ConversationDefinitionLike): () => void
+}
+
+/**
+ * Register the live failover notice: one conversation Definition claiming
+ * `daruma/failover` events for the chat target, plus the keyed renderer for
+ * its node kind. Absent or failing registrations degrade to nothing visible
+ * (warn only) — the panel keeps working either way.
+ */
+function registerFailoverChatNotice(ctx: ClientContext): void {
+  const registry = ctx.get('conversationEvents') as ConversationEventsLike | undefined
+  if (registry === undefined) {
+    console.warn('[dsh-daruma] conversation event registry unavailable — failover chat rows disabled')
+  } else {
+    try {
+      ctx.effect(
+        () => registry.register(createFailoverNoticeDefinition()),
+        'dsh-daruma: failover notice definition',
+      )
+    } catch (error) {
+      console.warn('[dsh-daruma] failover notice definition registration failed', error)
+    }
+  }
+  ctx.slots.inject('conversation.chat.node', () => {
+    try {
+      // The keyed seat instantiates entries with props (node, t, …); the
+      // structural slot type is narrower than the host's real registry.
+      return ctx.slots.register(
+        {
+          name: 'conversation.chat.node',
+          key: FAILOVER_NOTICE_KIND,
+          locale: NS,
+        },
+        FailoverNoticeRow as unknown as () => unknown,
+      )
+    } catch (error) {
+      console.warn('[dsh-daruma] failover notice renderer registration failed', error)
+      return () => {}
+    }
+  })
 }
 
 export const name = 'dsh-daruma'
@@ -69,4 +122,6 @@ export function apply(ctx: ClientContext): void {
     order: 0,
     inject: () => ({ api, t }),
   }, () => h(StatusDock, { api, t })))
+
+  registerFailoverChatNotice(ctx)
 }

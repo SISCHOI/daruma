@@ -3,7 +3,7 @@
  */
 
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { modelId, type Channel, type RecoveryPolicyConfig } from 'daruma-core'
 import { channelIdOf } from './mapping.ts'
 
@@ -18,14 +18,20 @@ export interface PluginConfig {
   readonly cooldownMs?: number
   readonly giveUpBudget?: number
   readonly stateFile?: string
+  readonly logFile?: string
 }
 
 export interface ResolvedConfig extends RecoveryPolicyConfig {
   readonly stateFile: string
+  readonly logFile: string
 }
 
 export function defaultStateFile(): string {
   return join(homedir(), '.dsh', 'daruma', 'channel-health.json')
+}
+
+export function defaultLogFile(stateFile: string): string {
+  return join(dirname(stateFile), 'failover-log.jsonl')
 }
 
 export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
@@ -64,12 +70,17 @@ export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
   if (raw.stateFile !== undefined && (typeof raw.stateFile !== 'string' || raw.stateFile.trim() === '')) {
     throw new Error('invalid stateFile: expected a non-empty string')
   }
+  if (raw.logFile !== undefined && (typeof raw.logFile !== 'string' || raw.logFile.trim() === '')) {
+    throw new Error('invalid logFile: expected a non-empty string')
+  }
 
+  const stateFile = raw.stateFile || defaultStateFile()
   return {
     channels,
     failureBudget,
     cooldownMs,
     giveUpBudget,
-    stateFile: raw.stateFile || defaultStateFile(),
+    stateFile,
+    logFile: raw.logFile || defaultLogFile(stateFile),
   }
 }

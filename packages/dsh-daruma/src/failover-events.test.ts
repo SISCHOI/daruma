@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FAILOVER_MESSAGE_LIMIT, buildDarumaFailoverEvent } from './failover-events.ts'
+import { FAILOVER_MESSAGE_LIMIT, buildDarumaFailoverEvent, buildDarumaGiveUpEvent } from './failover-events.ts'
 
 function input(overrides: Record<string, unknown> = {}) {
   return {
@@ -52,5 +52,51 @@ describe('buildDarumaFailoverEvent', () => {
     expect(event.status).toBeUndefined()
     expect(event.requestId).toBeUndefined()
     expect(event.message).toBeUndefined()
+    // Regression (e2e 2026-09-08): the host session append rejects own
+    // properties whose value is undefined (lossless-JSON snapshotter), so
+    // absent optional fields must not exist as keys at all.
+    expect('status' in event).toBe(false)
+    expect('requestId' in event).toBe(false)
+    expect('message' in event).toBe(false)
+  })
+})
+
+describe('buildDarumaGiveUpEvent', () => {
+  it('carries the give-up decision, budget state, and position', () => {
+    const event = buildDarumaGiveUpEvent({
+      from: 'mt::glm-5.3',
+      reason: 'give-up-budget-exhausted',
+      at: 2_000,
+      agentId: 'agent-1',
+      turn: 4,
+      step: 7,
+      failoverCount: 8,
+      giveUpBudget: 8,
+    })
+    expect(event).toEqual({
+      kind: 'give-up',
+      from: 'mt::glm-5.3',
+      reason: 'give-up-budget-exhausted',
+      at: 2_000,
+      agentId: 'agent-1',
+      turn: 4,
+      step: 7,
+      failoverCount: 8,
+      giveUpBudget: 8,
+    })
+  })
+
+  it('accepts the no-routable-fallback reason', () => {
+    const event = buildDarumaGiveUpEvent({
+      from: 'mt::a',
+      reason: 'no-routable-fallback',
+      at: 1,
+      agentId: 'a',
+      turn: 1,
+      step: 1,
+      failoverCount: 0,
+      giveUpBudget: 8,
+    })
+    expect(event.reason).toBe('no-routable-fallback')
   })
 })

@@ -10,6 +10,7 @@
 import {
   decide,
   freshHealth,
+  recordSuccess,
   type Channel,
   type ChannelHealth,
   type ChannelHealthStore,
@@ -98,6 +99,20 @@ export class RecoveryEngine {
   /** Release per-agent/session counters when the host disposes the scope. */
   clearScope(scope: string): void {
     this.failoversByScope.delete(scope)
+  }
+
+  /**
+   * Record a successful request on `channel`: closes the circuit and resets
+   * the failure counter (HEALTHY / 0). The host exposes no request-success
+   * event, so the adapter infers success from the next `agent/pre-step`.
+   * Unknown channels (e.g. an out-of-chain backup that only ever failed)
+   * start from a fresh health so their stale counters also clear.
+   */
+  onSuccess(channel: ChannelId): void {
+    const current = this.healths.get(channel) ?? freshHealth(channel, this.clock.nowMs())
+    const next = recordSuccess(current, this.clock.nowMs())
+    this.healths.set(channel, next)
+    this.store.save(next)
   }
 
   /** Scope's failover count so far (0 when never failed over). */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultLogFile } from './config.ts'
 import { resolveConfig } from './config.ts'
 
 describe('resolveConfig', () => {
@@ -9,6 +10,9 @@ describe('resolveConfig', () => {
     expect(config.cooldownMs).toBe(30_000)
     expect(config.giveUpBudget).toBe(8)
     expect(config.stateFile).toContain('channel-health.json')
+    // Default log lives next to the default state file.
+    expect(config.logFile).toContain('failover-log.jsonl')
+    expect(config.logFile).toBe(config.stateFile.replace('channel-health.json', 'failover-log.jsonl'))
   })
 
   it('derives channel ids from provider/model pairs', () => {
@@ -35,6 +39,12 @@ describe('resolveConfig', () => {
     expect(config.cooldownMs).toBe(60_000)
     expect(config.giveUpBudget).toBe(2)
     expect(config.stateFile).toBe('/tmp/daruma.json')
+    // logFile defaults next to an isolated stateFile, or can be pinned.
+    // (dirname/join normalize separators on Windows, so compare via the helper)
+    expect(config.logFile).toBe(defaultLogFile('/tmp/daruma.json'))
+    expect(config.logFile.endsWith('failover-log.jsonl')).toBe(true)
+    const pinned = resolveConfig({ stateFile: '/tmp/daruma.json', logFile: '/var/log/daruma.jsonl' })
+    expect(pinned.logFile).toBe('/var/log/daruma.jsonl')
   })
 
   it('rejects unsafe thresholds and malformed channels', () => {
@@ -48,5 +58,7 @@ describe('resolveConfig', () => {
       ],
     })).toThrow(/duplicate/)
     expect(() => resolveConfig([] as never)).toThrow(/expected an object/)
+    expect(() => resolveConfig({ logFile: '' })).toThrow(/logFile/)
+    expect(() => resolveConfig({ logFile: 42 as never })).toThrow(/logFile/)
   })
 })

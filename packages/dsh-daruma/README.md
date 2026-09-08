@@ -20,6 +20,20 @@ daruma. daruma then:
 Channel health persists to `~/.dsh/daruma/channel-health.json`, so a tripped
 channel stays cooled-down across restarts.
 
+## Visible failover notices in the conversation
+
+When a channel switch happens mid-turn, the web client renders a small
+`daruma` row **inside the conversation flow** (anchored at the failover event,
+right where it occurred): `mt::glm-5.3 failed (RATE_LIMIT) → trying
+deepseek-official::deepseek-v4-flash`, with the budget usage
+(`failover 2/3 · turn 3 step 1`) on hover.
+
+This works through the host's plugin-extensible conversation engine: the
+client registers a definition claiming `daruma/failover` session events plus a
+keyed renderer for its node kind, mirroring how in-repo retries render. The
+notice is **live-only** — out-of-repo session events are not yet persisted by
+the harness, so rows do not survive a page reload or a resumed session.
+
 ## Install
 
 ```bash
