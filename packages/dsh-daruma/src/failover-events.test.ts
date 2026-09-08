@@ -52,6 +52,12 @@ describe('buildDarumaFailoverEvent', () => {
     expect(event.status).toBeUndefined()
     expect(event.requestId).toBeUndefined()
     expect(event.message).toBeUndefined()
+    // Regression (e2e 2026-09-08): the host session append rejects own
+    // properties whose value is undefined (lossless-JSON snapshotter), so
+    // absent optional fields must not exist as keys at all.
+    expect('status' in event).toBe(false)
+    expect('requestId' in event).toBe(false)
+    expect('message' in event).toBe(false)
   })
 })
 

@@ -63,9 +63,16 @@ function clip(value: string | undefined, limit: number): string | undefined {
   return `${value.slice(0, limit)}…`
 }
 
-/** Assemble the durable failover event from decision-site facts. */
+/** Assemble the durable failover event from decision-site facts.
+ *
+ * Absent optional fields are omitted (not set to `undefined`): the host's
+ * session append validates data with a lossless-JSON snapshotter that rejects
+ * own properties whose value is `undefined`, so the event must carry only
+ * keys that actually have values.
+ */
 export function buildDarumaFailoverEvent(input: FailoverEventInput): DarumaFailoverEvent {
   const { failure } = input
+  const message = clip(failure.message, FAILOVER_MESSAGE_LIMIT)
   return {
     from: input.from,
     to: input.to,
@@ -74,9 +81,9 @@ export function buildDarumaFailoverEvent(input: FailoverEventInput): DarumaFailo
     agentId: input.agentId,
     turn: input.turn,
     step: input.step,
-    status: failure.status,
-    requestId: failure.requestId,
-    message: clip(failure.message, FAILOVER_MESSAGE_LIMIT),
+    ...(failure.status !== undefined ? { status: failure.status } : {}),
+    ...(failure.requestId !== undefined ? { requestId: failure.requestId } : {}),
+    ...(message !== undefined ? { message } : {}),
     failoverCount: input.failoverCount,
     giveUpBudget: input.giveUpBudget,
   }

@@ -166,22 +166,40 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return next()
   })
 
-  // The host exposes no request-success event. The next `agent/pre-step`
-  // firing for an agent proves its previous model request (the one
-  // `currentChannel` still points at) completed without tripping
-  // `agent/request-error` — so that channel earns a success record and its
-  // failure counter/cooldown reset. Never blocks the host loop: any error
-  // inside is logged and swallowed, and the waterfall always calls through.
+  // The host exposes no request-success event. Two adjacent host events prove
+  // "the previous model request completed without erroring":
+  //   1. `agent/pre-step` — the loop proposes the next step;
+  //   2. `agent/turn-stopping` — the turn is about to close.
+  // At either point, `currentChannel` still names the channel of the last
+  // request, so it earns a success record — unless a failure is still
+  // un-attributed (`failedSinceRequest`), which gates the false-positive
+  // where the turn died on an error and never sent another request.
+  // The turn-stopping arm is what makes single-step tasks (headless one-shot
+  // prompts) reset health: their only pre-step fires before any request.
+  // Never blocks the host loop: errors are logged and swallowed; the
+  // pre-step waterfall always calls through.
+  const recordInferredSuccess = (agentId: string): void => {
+    const channel = currentChannel.get(agentId)
+    if (channel !== undefined && !failedSinceRequest.has(agentId)) {
+      engine.onSuccess(channel)
+    }
+  }
+
   ctx.on('agent/pre-step', async (payload, next) => {
     try {
-      const channel = currentChannel.get(payload.agent.id)
-      if (channel !== undefined && !failedSinceRequest.has(payload.agent.id)) {
-        engine.onSuccess(channel)
-      }
+      recordInferredSuccess(payload.agent.id)
     } catch (error) {
       ctx.logger.warn(`dsh-daruma: success recording failed: ${String(error)}`)
     }
     return next()
+  })
+
+  ctx.on('agent/turn-stopping', ({ agent }) => {
+    try {
+      recordInferredSuccess(agent.id)
+    } catch (error) {
+      ctx.logger.warn(`dsh-daruma: success recording failed: ${String(error)}`)
+    }
   })
 
   ctx.on('agent/disposed', ({ agent }) => {
