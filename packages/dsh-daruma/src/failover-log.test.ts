@@ -41,7 +41,7 @@ describe('JsonlFailoverLogStore', () => {
 
     const lines = readFileSync(file, 'utf8').trim().split('\n')
     expect(lines).toHaveLength(2)
-    expect(JSON.parse(lines[0])).toEqual({
+    expect(JSON.parse(lines[0]!)).toEqual({
       kind: 'failover',
       t: 1000,
       agentId: 'agent-1',
@@ -54,7 +54,7 @@ describe('JsonlFailoverLogStore', () => {
       failoverCount: 1,
       giveUpBudget: 8,
     })
-    expect(JSON.parse(lines[1])).toMatchObject({ kind: 'boot', pid: 42 })
+    expect(JSON.parse(lines[1]!)).toMatchObject({ kind: 'boot', pid: 42 })
   })
 
   it('rotates to `.1` when the file exceeds the size budget', () => {
@@ -69,7 +69,7 @@ describe('JsonlFailoverLogStore', () => {
     expect(readFileSync(`${file}.1`, 'utf8')).toBe('x'.repeat(FAILOVER_LOG_ROTATE_BYTES))
     const lines = readFileSync(file, 'utf8').trim().split('\n')
     expect(lines).toHaveLength(1)
-    expect(JSON.parse(lines[0])).toMatchObject({ kind: 'boot' })
+    expect(JSON.parse(lines[0]!)).toMatchObject({ kind: 'boot' })
   })
 
   it('does not rotate below the size budget', () => {
