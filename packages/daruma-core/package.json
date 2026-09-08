@@ -1,6 +1,6 @@
 {
   "name": "daruma-core",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Pure domain layer for Daruma: failure classification, channel health (circuit breaker), and recovery policy decision engine. Zero Node runtime dependencies.",
   "type": "module",
   "license": "MIT",
@@ -23,7 +23,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "node ../../scripts/check-no-bom.cjs"
   },
   "keywords": [
     "daruma",

@@ -1,7 +1,7 @@
 {
   "name": "dsh-daruma",
-  "version": "0.1.4",
-  "description": "Daruma resilience plugin for DeepSeek Harness 鈥?detects model-request failures and fails over to another channel to keep long tasks alive.",
+  "version": "0.1.5",
+  "description": "Daruma resilience plugin for DeepSeek Harness — detects model-request failures and fails over to another channel to keep long tasks alive.",
   "type": "module",
   "license": "MIT",
   "author": "SISCHOI",
@@ -41,7 +41,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "node ../../scripts/check-no-bom.cjs"
   },
   "keywords": [
     "deepseek-harness",
