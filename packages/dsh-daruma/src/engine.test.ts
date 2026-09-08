@@ -103,4 +103,40 @@ describe('RecoveryEngine', () => {
     expect(engine.failoverCountFor('agent-1')).toBe(1)
     expect(engine.giveUpBudget).toBe(config.giveUpBudget)
   })
+
+  describe('onSuccess', () => {
+    it('resets a tripped channel to HEALTHY and persists it', () => {
+      const store = new MemoryStore()
+      let now = 1000
+      const engine = new RecoveryEngine(config, store, { nowMs: () => now })
+      engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: now })
+      engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: now })
+      engine.onFailure({ code: 'RATE_LIMIT', channel: A, occurredAtMs: now })
+      expect(store.map.get(A)?.state).toBe('COOLDOWN')
+
+      now = 5000
+      engine.onSuccess(A)
+      expect(store.map.get(A)).toMatchObject({ state: 'HEALTHY', consecutiveFailures: 0, cooldownUntilMs: 0 })
+      expect(engine.listHealth().find((h) => h.channel === A)).toMatchObject({
+        state: 'HEALTHY',
+        failures: 0,
+        cooldownUntilMs: 0,
+      })
+    })
+
+    it('seeds fresh health for an untracked channel (stale out-of-chain backup)', () => {
+      const store = new MemoryStore()
+      const engine = new RecoveryEngine(config, store, { nowMs: () => 1000 })
+      engine.onSuccess(C) // C is not in this engine's chain config
+      expect(store.map.get(C)).toMatchObject({ state: 'HEALTHY', consecutiveFailures: 0 })
+    })
+
+    it('is idempotent for an already-healthy channel', () => {
+      const store = new MemoryStore()
+      const engine = new RecoveryEngine(config, store, { nowMs: () => 1000 })
+      engine.onSuccess(A)
+      engine.onSuccess(A)
+      expect(store.map.get(A)).toMatchObject({ state: 'HEALTHY', consecutiveFailures: 0 })
+    })
+  })
 })

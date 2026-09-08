@@ -50,6 +50,10 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const currentChannel = new Map<string, ChannelId>()
   // Per-agent failover target armed on the previous failed request.
   const pending = new Map<string, Channel>()
+  // Agents whose latest request-attempt failed and has not been followed by a
+  // fresh request yet. `agent/pre-step` infers "the last request succeeded"
+  // only when the agent is absent here (see onSuccess wiring below).
+  const failedSinceRequest = new Set<string>()
 
   /** The user-chosen backup channel, if set and healthy. */
   const backupChannel = (): Channel | undefined => {
@@ -59,6 +63,8 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   }
 
   ctx.on('agent/request', async (payload, next) => {
+    // A new request attempt supersedes any recorded failure attribution.
+    failedSinceRequest.delete(payload.agent.id)
     const current: LlmCallConfig = await next()
     const armed = pending.get(payload.agent.id)
     if (armed) {
@@ -75,6 +81,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   })
 
   ctx.on('agent/request-error', async (payload, next): Promise<RequestErrorAction> => {
+    failedSinceRequest.add(payload.agent.id)
     const channel = currentChannel.get(payload.agent.id) ?? channelIdOf(payload.provider, '')
     const signal = toFailureSignal(payload.failure, channel, Date.now())
     const plan = engine.onFailure(signal, backupChannel(), payload.agent.id)
@@ -108,9 +115,28 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return next()
   })
 
+  // The host exposes no request-success event. The next `agent/pre-step`
+  // firing for an agent proves its previous model request (the one
+  // `currentChannel` still points at) completed without tripping
+  // `agent/request-error` — so that channel earns a success record and its
+  // failure counter/cooldown reset. Never blocks the host loop: any error
+  // inside is logged and swallowed, and the waterfall always calls through.
+  ctx.on('agent/pre-step', async (payload, next) => {
+    try {
+      const channel = currentChannel.get(payload.agent.id)
+      if (channel !== undefined && !failedSinceRequest.has(payload.agent.id)) {
+        engine.onSuccess(channel)
+      }
+    } catch (error) {
+      ctx.logger.warn(`dsh-daruma: success recording failed: ${String(error)}`)
+    }
+    return next()
+  })
+
   ctx.on('agent/disposed', ({ agent }) => {
     currentChannel.delete(agent.id)
     pending.delete(agent.id)
+    failedSinceRequest.delete(agent.id)
     engine.clearScope(agent.id)
   })
 
