@@ -24,6 +24,7 @@ import { channelIdOf, channelIdOfConfig, toCallConfig, toFailureSignal } from '.
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
+import { JsonlFailoverLogStore } from './failover-log.ts'
 import { buildDarumaFailoverEvent, type DarumaFailoverEvent } from './failover-events.ts'
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
@@ -44,7 +45,20 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const config = resolveConfig(rawConfig)
   const store = new JsonFileChannelHealthStore(config.stateFile)
   const engine = new RecoveryEngine(config, store)
+  const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx)
+
+  // Boot record: one line per plugin start, so audits can align restart
+  // boundaries with the failover/give-up lines that follow.
+  failoverLog.append({
+    kind: 'boot',
+    t: Date.now(),
+    pid: process.pid,
+    channels: config.channels.map((channel) => channel.id),
+    failureBudget: config.failureBudget,
+    cooldownMs: config.cooldownMs,
+    giveUpBudget: config.giveUpBudget,
+  })
 
   // Per-agent channel currently in use (tracked from the last request).
   const currentChannel = new Map<string, ChannelId>()
@@ -101,6 +115,19 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         giveUpBudget: engine.giveUpBudget,
       })
       payload.agent.session.append('daruma/failover', event)
+      failoverLog.append({
+        kind: 'failover',
+        t: event.at,
+        agentId: payload.agent.id,
+        from: channel,
+        to: plan.verdict.target.id,
+        reason: signal.code,
+        status: payload.failure.status,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
       ctx.logger.warn(
         `dsh-daruma: failover ${channel} -> ${plan.verdict.target.id} (${signal.code}) agent=${payload.agent.id} turn=${payload.turn} step=${payload.step}`,
       )
@@ -108,6 +135,18 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     }
 
     if (plan.verdict.kind === 'GIVE_UP') {
+      failoverLog.append({
+        kind: 'give-up',
+        t: Date.now(),
+        agentId: payload.agent.id,
+        from: channel,
+        reason: plan.verdict.reason,
+        status: payload.failure.status,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
       ctx.logger.error(`dsh-daruma: giving up (${plan.verdict.reason})`)
     }
 
