@@ -81,3 +81,45 @@ export function buildDarumaFailoverEvent(input: FailoverEventInput): DarumaFailo
     giveUpBudget: input.giveUpBudget,
   }
 }
+
+/** Why recovery gave up (mirrors the core engine's GIVE_UP reasons). */
+export type DarumaGiveUpReason = 'give-up-budget-exhausted' | 'no-routable-fallback'
+
+/** Durable session event appended when recovery gives up entirely. */
+export interface DarumaGiveUpEvent {
+  /** Discriminator-compatible shape with {@link DarumaFailoverEvent}. */
+  readonly kind: 'give-up'
+  /** Channel id the final failure occurred on. */
+  readonly from: string
+  /** {@link DarumaGiveUpReason}. */
+  readonly reason: DarumaGiveUpReason
+  /** Epoch ms of the give-up decision. */
+  readonly at: number
+  /** Agent whose recovery gave up (its scope id). */
+  readonly agentId: string
+  /** Turn containing the final failed request (1-based). */
+  readonly turn: number
+  /** Step containing the final failed request attempt (1-based). */
+  readonly step: number
+  /** Scope failover count at the give-up decision. */
+  readonly failoverCount: number
+  /** Scope give-up budget the count counted against. */
+  readonly giveUpBudget: number
+}
+
+/** Event data required from the give-up decision site. */
+export interface GiveUpEventInput {
+  readonly from: string
+  readonly reason: DarumaGiveUpReason
+  readonly at: number
+  readonly agentId: string
+  readonly turn: number
+  readonly step: number
+  readonly failoverCount: number
+  readonly giveUpBudget: number
+}
+
+/** Assemble the durable give-up event from decision-site facts. */
+export function buildDarumaGiveUpEvent(input: GiveUpEventInput): DarumaGiveUpEvent {
+  return { kind: 'give-up', ...input }
+}

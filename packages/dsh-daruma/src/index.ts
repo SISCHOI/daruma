@@ -25,7 +25,7 @@ import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
 import { JsonlFailoverLogStore } from './failover-log.ts'
-import { buildDarumaFailoverEvent, type DarumaFailoverEvent } from './failover-events.ts'
+import { buildDarumaFailoverEvent, buildDarumaGiveUpEvent, type DarumaFailoverEvent, type DarumaGiveUpEvent } from './failover-events.ts'
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
@@ -33,11 +33,12 @@ import { modelId, type Channel, type ChannelId } from 'daruma-core'
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
 
-export type { DarumaFailoverEvent }
+export type { DarumaFailoverEvent, DarumaGiveUpEvent }
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     'daruma/failover': DarumaFailoverEvent
+    'daruma/give-up': DarumaGiveUpEvent
   }
 }
 
@@ -135,12 +136,23 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     }
 
     if (plan.verdict.kind === 'GIVE_UP') {
+      const giveUpEvent = buildDarumaGiveUpEvent({
+        from: channel,
+        reason: plan.verdict.reason === 'no-routable-fallback' ? 'no-routable-fallback' : 'give-up-budget-exhausted',
+        at: Date.now(),
+        agentId: payload.agent.id,
+        turn: payload.turn,
+        step: payload.step,
+        failoverCount: plan.failoverCount,
+        giveUpBudget: engine.giveUpBudget,
+      })
+      payload.agent.session.append('daruma/give-up', giveUpEvent)
       failoverLog.append({
         kind: 'give-up',
-        t: Date.now(),
+        t: giveUpEvent.at,
         agentId: payload.agent.id,
         from: channel,
-        reason: plan.verdict.reason,
+        reason: giveUpEvent.reason,
         status: payload.failure.status,
         turn: payload.turn,
         step: payload.step,

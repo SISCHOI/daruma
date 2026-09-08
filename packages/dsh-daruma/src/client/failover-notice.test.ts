@@ -4,6 +4,7 @@ import {
   failoverNoticeCopy,
   FAILOVER_EVENT_TYPE,
   FAILOVER_NOTICE_KIND,
+  GIVE_UP_EVENT_TYPE,
   fillTemplate,
   parseFailoverNotice,
   type ConversationContextLike,
@@ -48,6 +49,7 @@ describe('parseFailoverNotice', () => {
   it('carries the failover facts through', () => {
     const parsed = parseFailoverNotice(PAYLOAD)
     expect(parsed).toEqual({
+      kind: 'failover',
       from: 'mt::glm-5.3',
       to: 'deepseek-official::deepseek-v4-flash',
       reason: 'RATE_LIMIT',
@@ -57,6 +59,20 @@ describe('parseFailoverNotice', () => {
       count: 2,
       budget: 3,
     })
+  })
+
+  it('parses a give-up payload without a target channel', () => {
+    const parsed = parseFailoverNotice({
+      kind: 'give-up',
+      from: 'mt::glm-5.3',
+      reason: 'give-up-budget-exhausted',
+      at: 5,
+      turn: 2,
+      step: 9,
+      failoverCount: 8,
+      giveUpBudget: 8,
+    })
+    expect(parsed).toMatchObject({ kind: 'give-up', from: 'mt::glm-5.3', to: '', count: 8, budget: 8 })
   })
 
   it('rejects non-record payloads', () => {
@@ -102,6 +118,25 @@ describe('failoverNoticeCopy', () => {
     expect(line).toBe('mt::glm-5.3 failed (RATE_LIMIT) → trying deepseek-official::deepseek-v4-flash')
     expect(detail).toBe('failover 2/3 · turn 3 step 1')
   })
+
+  it('renders give-up copy through the give-up keys', () => {
+    const giveUp = parseFailoverNotice({
+      kind: 'give-up',
+      from: 'mt::glm-5.3',
+      reason: 'give-up-budget-exhausted',
+      at: 5,
+      turn: 2,
+      step: 9,
+      failoverCount: 8,
+      giveUpBudget: 8,
+    })!
+    const zhCopy = failoverNoticeCopy(giveUp, zhT)
+    expect(zhCopy.line).toContain('已用尽恢复手段')
+    expect(zhCopy.line).not.toContain('本次尝试')
+    const enCopy = failoverNoticeCopy(giveUp, enT)
+    expect(enCopy.line).toContain('giving up')
+    expect(enCopy.line).not.toContain('trying')
+  })
 })
 
 describe('failover notice definition', () => {
@@ -117,6 +152,27 @@ describe('failover notice definition', () => {
     expect(definition.match(failoverEvent(PAYLOAD, 7))).toEqual({ id: '7', role: 'start' })
     expect(definition.match({ ...failoverEvent(PAYLOAD), type: 'user/message' })).toBeNull()
     expect(definition.match(failoverEvent({ from: 'only-one-side' }))).toBeNull()
+  })
+
+  it('also claims daruma/give-up events', () => {
+    const giveUpEvent: RawSessionEventLike = {
+      type: GIVE_UP_EVENT_TYPE,
+      seq: 55,
+      time: 1_725_000_000_000,
+      data: {
+        kind: 'give-up',
+        from: 'mt::glm-5.3',
+        reason: 'no-routable-fallback',
+        at: 5,
+        turn: 1,
+        step: 3,
+        failoverCount: 8,
+        giveUpBudget: 8,
+      },
+    }
+    expect(definition.match(giveUpEvent)).toEqual({ id: '55', role: 'start' })
+    // A give-up payload missing even `from` is not claimable.
+    expect(definition.match({ ...giveUpEvent, data: { kind: 'give-up', reason: 'x' } })).toBeNull()
   })
 
   it('starts with the parsed failover facts', () => {

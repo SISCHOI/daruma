@@ -39,6 +39,12 @@ const dotStyle: CSSProperties = {
   background: 'var(--dsw-static-deepseek-500)',
 }
 
+/** Give-up rows use the error tint instead of the brand dot. */
+const giveUpDotStyle: CSSProperties = {
+  ...dotStyle,
+  background: 'var(--dsw-alias-status-error, #e5484d)',
+}
+
 const brandStyle: CSSProperties = {
   flex: 'none',
   fontWeight: 600,
@@ -52,22 +58,23 @@ const lineStyle: CSSProperties = {
   minWidth: 0,
 }
 
-/** Render one settled failover row, or nothing when the payload is unusable. */
+/** Render one settled failover / give-up row, or nothing when unusable. */
 export function FailoverNoticeRow({ node, t }: FailoverNoticeRowProps) {
   const data = parseFailoverNotice(node.data as unknown)
   if (data === null) return null
   const { line, detail } = failoverNoticeCopy(data, t)
   const title = line === detail ? detail : `${line} · ${detail}`
+  const isGiveUp = data.kind === 'give-up'
   return h(
     'div',
     {
-      'data-daruma-notice': 'true',
+      'data-daruma-notice': isGiveUp ? 'give-up' : 'failover',
       role: 'note',
       style: rowStyle,
       title,
     },
     [
-      h('span', { 'aria-hidden': true, style: dotStyle }),
+      h('span', { 'aria-hidden': true, style: isGiveUp ? giveUpDotStyle : dotStyle }),
       h('span', { style: brandStyle }, 'daruma'),
       h('span', { style: lineStyle }, line),
     ],

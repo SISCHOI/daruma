@@ -15,18 +15,23 @@
 /** Session event type appended by the daruma server on every channel switch. */
 export const FAILOVER_EVENT_TYPE = 'daruma/failover'
 
+/** Session event type appended when recovery gives up entirely. */
+export const GIVE_UP_EVENT_TYPE = 'daruma/give-up'
+
 /** Chat node kind (conversation-definition kind + renderer key) used here. */
 export const FAILOVER_NOTICE_KIND = 'daruma-failover'
 
-/** Display data carved out of one `daruma/failover` session event. */
+/** Display data carved out of one `daruma/failover` or `daruma/give-up` event. */
 export interface FailoverNoticeData {
+  /** Which recovery decision this row reports. */
+  readonly kind: 'failover' | 'give-up'
   /** Channel id the request failed on, e.g. `mt::glm-5.3`. */
   readonly from: string
-  /** Channel id recovery switched to. */
+  /** Channel id recovery switched to (`give-up` rows leave this empty). */
   readonly to: string
-  /** Stable failure code, e.g. `RATE_LIMIT`. */
+  /** Stable failure code / give-up reason, e.g. `RATE_LIMIT`. */
   readonly reason: string
-  /** Epoch ms of the failover decision. */
+  /** Epoch ms of the decision. */
   readonly at: number
   /** Turn containing the failed request. */
   readonly turn: number
@@ -107,20 +112,24 @@ function finiteNumber(value: unknown): number {
 }
 
 /**
- * Defensively parse one `daruma/failover` payload into display data.
- * Returns `null` when the payload is not a usable failover record, so a
+ * Defensively parse one `daruma/failover` (or `daruma/give-up`) payload into
+ * display data. Returns `null` when the payload is not a usable record, so a
  * malformed event never renders (and is never claimed by this definition).
+ * A `give-up` row needs only `from`; a `failover` row needs `from` and `to`.
  */
 export function parseFailoverNotice(raw: unknown): FailoverNoticeData | null {
   if (!isRecord(raw)) return null
+  const kind: 'failover' | 'give-up' = raw.kind === 'give-up' ? 'give-up' : 'failover'
   const from = clip(raw.from, CHANNEL_LIMIT)
   const to = clip(raw.to, CHANNEL_LIMIT)
-  if (from === undefined || to === undefined) return null
+  if (from === undefined) return null
+  if (kind === 'failover' && to === undefined) return null
   const reason = clip(raw.reason, REASON_LIMIT) ?? 'FAILURE'
   const at = finiteNumber(raw.at)
   return {
+    kind,
     from,
-    to,
+    to: to ?? '',
     reason,
     at: at === 0 ? Date.now() : at,
     turn: finiteNumber(raw.turn),
@@ -150,6 +159,19 @@ export function failoverNoticeCopy(
   data: FailoverNoticeData,
   t: (key: string) => string,
 ): FailoverNoticeCopy {
+  if (data.kind === 'give-up') {
+    const line = fillTemplate(t('failoverGiveUpLine'), {
+      from: data.from,
+      reason: data.reason,
+    })
+    const detail = fillTemplate(t('failoverGiveUpDetail'), {
+      count: String(data.count),
+      budget: String(data.budget),
+      turn: String(data.turn),
+      step: String(data.step),
+    })
+    return { line, detail }
+  }
   const line = fillTemplate(t('failoverNoticeLine'), {
     from: data.from,
     to: data.to,
@@ -165,9 +187,10 @@ export function failoverNoticeCopy(
 }
 
 /**
- * The conversation Definition claiming `daruma/failover` events for the chat
- * target. One failover = one context (id = its event seq) = one settled row,
- * anchored at the event's own log position so it lands inline in the flow.
+ * The conversation Definition claiming `daruma/failover` and `daruma/give-up`
+ * events for the chat target. One decision = one context (id = its event seq)
+ * = one settled row, anchored at the event's own log position so it lands
+ * inline in the flow.
  */
 export function createFailoverNoticeDefinition(): ConversationDefinitionLike {
   const start = (_context: ConversationContextLike, match: ConversationMatchLike): FailoverNoticeData => {
@@ -183,7 +206,7 @@ export function createFailoverNoticeDefinition(): ConversationDefinitionLike {
     kind: FAILOVER_NOTICE_KIND,
     target: 'chat',
     match: (event) => {
-      if (event.type !== FAILOVER_EVENT_TYPE) return null
+      if (event.type !== FAILOVER_EVENT_TYPE && event.type !== GIVE_UP_EVENT_TYPE) return null
       if (parseFailoverNotice(event.data) === null) return null
       return { id: String(event.seq), role: 'start' }
     },
