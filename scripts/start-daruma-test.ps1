@@ -7,14 +7,14 @@
 #   powershell -ExecutionPolicy Bypass -File scripts/start-daruma-test.ps1
 #   (or right-click → Run with PowerShell)
 #
-# Then open http://127.0.0.1:3081 in your browser to see the daruma status
+# Then open http://127.0.0.1:3082 in your browser to see the daruma status
 # dock and the backup-channel panel.
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $mockPort = 3099
-$dshPort = 3081
+$dshPort = 3082
 $mockScript = Join-Path $root 'scripts\mock-llm-server.mjs'
 
 if (-not (Test-Path $mockScript)) {

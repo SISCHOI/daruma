@@ -6,9 +6,11 @@
 // files is not enough: untracked (freshly written) files are covered too.
 // Any file mutation on Windows must be done with BOM-less tooling
 // (edit/write tools, Node fs.writeFileSync, or PS7+ utf8NoBOM).
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const root = path.resolve(__dirname, '..')
 
