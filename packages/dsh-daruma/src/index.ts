@@ -29,6 +29,8 @@ import { buildDarumaFailoverEvent, buildDarumaGiveUpEvent, type DarumaFailoverEv
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
+import { createEventSink } from './event-sink.ts'
+import { detectHostCapabilities } from './host-capabilities.ts'
 
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
@@ -48,6 +50,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const engine = new RecoveryEngine(config, store)
   const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx)
+  const eventSink = createEventSink(ctx.logger)
+  const capabilities = detectHostCapabilities(ctx)
+  ctx.logger.info(`dsh-daruma: host capabilities ${JSON.stringify(capabilities)}`)
 
   // Boot record: one line per plugin start, so audits can align restart
   // boundaries with the failover/give-up lines that follow.
@@ -115,7 +120,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         failoverCount: plan.failoverCount,
         giveUpBudget: engine.giveUpBudget,
       })
-      payload.agent.session.append('daruma/failover', event)
+      eventSink.append(payload.agent, { type: 'daruma/failover', value: event })
       failoverLog.append({
         kind: 'failover',
         t: event.at,
@@ -146,7 +151,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         failoverCount: plan.failoverCount,
         giveUpBudget: engine.giveUpBudget,
       })
-      payload.agent.session.append('daruma/give-up', giveUpEvent)
+      eventSink.append(payload.agent, { type: 'daruma/give-up', value: giveUpEvent })
       failoverLog.append({
         kind: 'give-up',
         t: giveUpEvent.at,
