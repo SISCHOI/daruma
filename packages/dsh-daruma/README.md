@@ -106,3 +106,12 @@ registry (same names you use in the settings model selector).
 pnpm --filter dsh-daruma build
 pnpm --filter dsh-daruma test
 ```
+
+## Host compatibility boundary
+
+The recovery engine is independent of DSH runtime objects. Host-facing session
+writes go through `src/event-sink.ts`; a Session API change or an unavailable
+custom event surface is logged and degraded without interrupting failover.
+`src/host-capabilities.ts` records optional host surfaces (RPC and conversation
+event registry) so client integrations can remain capability-driven as DSH
+releases evolve.
