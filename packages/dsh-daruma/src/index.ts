@@ -20,7 +20,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import { channelIdOf, channelIdOfConfig, toCallConfig, toFailureSignal } from './mapping.ts'
+import { channelIdOf, channelIdOfConfig, toFailoverConfig, toFailureSignal, type EffortDisposition } from './mapping.ts'
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
@@ -41,6 +41,34 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     'daruma/failover': DarumaFailoverEvent
     'daruma/give-up': DarumaGiveUpEvent
+  }
+}
+
+/**
+ * Record what the failover target did with the caller's reasoning effort.
+ *
+ * A dropped effort is a real change to the request (the target runs at its own
+ * default level instead of the user's), so it has to be visible in the server
+ * log rather than folded silently into the channel-switch line. `none-requested`
+ * and `kept` are the ordinary cases and stay quiet.
+ */
+function logEffortDisposition(ctx: Context, target: Channel, effort: EffortDisposition): void {
+  switch (effort.kind) {
+    case 'none-requested':
+    case 'kept':
+      return
+    case 'dropped-unsupported':
+      ctx.logger.warn(
+        `dsh-daruma: ${target.id} does not accept reasoning effort "${effort.effort}" `
+        + `(advertised: ${effort.accepted.length > 0 ? effort.accepted.join(', ') : 'none'}); `
+        + 'dropping it for the failover request so it can dispatch',
+      )
+      return
+    case 'dropped-unverifiable':
+      ctx.logger.warn(
+        `dsh-daruma: could not resolve reasoning efforts for ${target.id}; `
+        + `dropping "${effort.effort}" so the failover request can dispatch`,
+      )
   }
 }
 
@@ -87,11 +115,12 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     const armed = pending.get(payload.agent.id)
     if (armed) {
       pending.delete(payload.agent.id)
-      const swapped = toCallConfig(current, armed)
+      const { config: swapped, effort } = await toFailoverConfig(current, armed, ctx.llm)
       currentChannel.set(payload.agent.id, channelIdOfConfig(swapped))
       ctx.logger.warn(
         `dsh-daruma: switching ${current.provider}/${current.model} -> ${swapped.provider}/${swapped.model}`,
       )
+      logEffortDisposition(ctx, armed, effort)
       return swapped
     }
     currentChannel.set(payload.agent.id, channelIdOfConfig(current))

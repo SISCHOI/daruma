@@ -1,4 +1,4 @@
-﻿failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8900008Z mock completion from mock-b
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8900008Z mock completion from mock-b
 failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8901914Z PASS  task exits 0 — status=0 
 failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8904762Z PASS  task text came from the fallback channel — mock completion from mock-b
 failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8906358Z PASS  failover log has a boot line

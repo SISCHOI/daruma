@@ -1,4 +1,4 @@
-﻿failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6121230Z mock completion from mock-b
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6121230Z mock completion from mock-b
 failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6125440Z PASS  task exits 0 — status=0 
 failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6127770Z PASS  task text came from the fallback channel — mock completion from mock-b
 failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6129270Z PASS  failover log has a boot line
