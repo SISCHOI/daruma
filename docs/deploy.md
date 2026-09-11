@@ -72,3 +72,60 @@ names.
 # cordis.patch.yml.bak-daruma), then:
 dsh plugin --profile web remove dsh-daruma daruma-core
 ```
+
+## Publishing to npm
+
+The workspace is a **pnpm** workspace, so publish from the package directory —
+`npm publish --workspace packages/dsh-daruma` fails with `No workspaces found`.
+
+```powershell
+# 0. clean tree on main, up to date
+git switch main; git pull --ff-only
+git status --short        # must be empty
+
+# 1. bump only the package that changed (daruma-core keeps its version when untouched)
+#    packages/dsh-daruma/package.json -> "version": "x.y.z"
+
+# 2. gates (a fresh clone needs the build first: the workspace packages resolve
+#    each other through their built lib/)
+pnpm install --frozen-lockfile
+pnpm run build; pnpm run typecheck; pnpm run lint; pnpm run test; pnpm run check:no-bom
+
+# 3. dry run from the package: runs prepublishOnly (BOM guard) and packs
+cd packages\dsh-daruma
+pnpm publish --dry-run --no-git-checks
+# expect: "📦 dsh-daruma@x.y.z → https://registry.npmjs.org/" + "Skip publishing (dry run)"
+
+# 4. publish (needs npm auth, see below)
+pnpm publish
+```
+
+Verify afterwards:
+
+```powershell
+npm view dsh-daruma dist-tags --json          # latest must be the new version
+npm view dsh-daruma@x.y.z dist.tarball        # then spot-check the tarball if needed
+```
+
+### npm auth
+
+`~/.npmrc` may hold a `//registry.npmjs.org/:_authToken` that has since been
+revoked — `npm whoami` then answers `E401` while the value still looks
+configured. Two ways back in:
+
+```powershell
+# a) interactive web login (browser handoff); run it in a real terminal —
+#    in a non-interactive shell npm falls back to a Username:/Password: prompt
+npm login --auth-type web
+# b) granular token, injected for one command only (never written to disk)
+$env:NPM_TOKEN = 'npm_...'
+pnpm publish --config.//registry.npmjs.org/:_authToken=$env:NPM_TOKEN
+```
+
+Retire stale tokens in the npm web UI (Access Tokens) instead of leaving them in
+`~/.npmrc`.
+
+### Rollback
+
+Within 72 hours: `npm unpublish dsh-daruma@x.y.z`. After that the version number
+cannot be reused — publish `x.y.(z+1)` with a revert instead.
