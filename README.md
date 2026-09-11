@@ -108,7 +108,7 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 
 ## Status
 
-- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest 0.1.5)
+- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.7, `daruma-core` 0.1.5)
 - Cross-platform: Windows, Linux and macOS — CI runs typecheck, lint, unit tests, build and the BOM guard on all three, and the failover end-to-end check on Linux and macOS; additionally verified locally inside WSL 2 (Ubuntu 24.04)
 - Unit tests: `daruma-core` 28 + `dsh-daruma` 71, all green
 - End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md)) — reproducible anywhere with `pnpm run e2e:failover`
@@ -281,7 +281,7 @@ dsh plugin --profile web add dsh-daruma
 
 ## 状态
 
-- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest 0.1.5）
+- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.7、`daruma-core` 0.1.5）
 - 跨平台：Windows / Linux / macOS —— CI 在三个系统上都跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 上实跑；另外在本机 WSL 2（Ubuntu 24.04）里全流程实跑通过
 - 单元测试（`daruma-core` 28 + `dsh-daruma` 71），全绿
 - 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）——现在任何系统上一条 `pnpm run e2e:failover` 即可复现

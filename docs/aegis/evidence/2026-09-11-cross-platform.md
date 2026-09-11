@@ -1,9 +1,9 @@
 # daruma 跨平台适配（Windows / Linux / macOS）
 
 - 日期：2026-09-11
-- 分支：`feat/cross-platform`（基于 `fix/rpc-late-mount`，两者均未合并）
-- 结论：**源码、脚本、文档与 CI 全部去 Windows 化；Linux 与 macOS 由真实 runner 实跑验证（4/4 e2e 作业 + 6/6 verify 作业全绿）**
-- CI 运行：`ci` #34567264975 @ `cf194e0` → 10/10 success（首次 #34563184490 的失败见 §3；本机 WSL 实测见 §3b）
+- 分支：`feat/cross-platform`（后续收口在 `fix/wsl-dsh-interop`；两者均已合并进 main）
+- 结论：**源码、脚本、文档与 CI 全部去 Windows 化；Linux 与 macOS 由真实 runner 实跑验证（4/4 e2e 作业 + 6/6 verify 作业全绿），另有本机 WSL 全流程实测**
+- CI 运行：`ci` #34567264975 @ `cf194e0`、#34575893336 @ `fe0f876`（WSL 守卫）、#34577540218 @ `7371312`（合并后 main）→ 均 10/10 success（首次 #34563184490 的失败见 §3；本机 WSL 实测见 §3b）
 
 ## 1. 平台耦合审计
 
