@@ -16,8 +16,22 @@ daruma. daruma then:
    arms the next routable channel (the user-chosen backup first, then the
    configured chain) and returns `{ kind: 'retry' }`;
 3. on the retry turn, the `agent/request` waterfall swaps the request config
-   onto the armed channel;
+   onto the armed channel — dropping the caller's `reasoningEffort` when that
+   target does not advertise the level (see below);
 4. appends one JSON line per decision to the audit log (see below).
+
+**A failover target has to accept the request.** DSH validates an explicit
+`reasoningEffort` against the **target's** own capability and refuses the
+request before any provider I/O; that refusal is raised outside
+`agent/request-error`, so a swapped request carrying an effort the target
+cannot take kills the turn without ever reaching the provider — the failover
+channel never dispatches, and the channel that is actually broken keeps looking
+healthy. daruma therefore reads the target's model metadata on every swap: a
+supported effort is kept, an unsupported (or unresolvable) one is dropped so
+the target can use its own default, and the drop is logged —
+`dsh-daruma: mt::glm-5.3 does not accept reasoning effort "high" …`. Every
+other field (`maxTokens`, temperature, stop sequences) is passed through
+untouched.
 
 **Self-healing:** the host exposes no request-success event, so success is
 inferred — an agent whose previous model request never tripped

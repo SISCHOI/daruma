@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ReasoningEffortId, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import {
   channelIdOf,
   channelIdOfConfig,
@@ -66,7 +66,7 @@ describe('mapping', () => {
   })
 
   describe('toFailoverConfig', () => {
-    const base = {
+    const base: LlmCallConfig = {
       provider: 'deepseek-official',
       model: 'deepseek-v4-flash',
       reasoningEffort: ReasoningEffortId('high'),
@@ -117,7 +117,11 @@ describe('mapping', () => {
     })
 
     it('never queries the runtime for a request that carries no effort', async () => {
-      const { reasoningEffort: _unused, ...withoutEffort } = base
+      const withoutEffort: LlmCallConfig = {
+        provider: base.provider,
+        model: base.model,
+        maxTokens: base.maxTokens,
+      }
       const lookup: ReasoningCapabilityLookup = { resolveModelInfo: vi.fn() }
       const { config, effort } = await toFailoverConfig(withoutEffort, TARGET, lookup)
 
