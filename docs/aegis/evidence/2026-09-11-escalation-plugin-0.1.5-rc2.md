@@ -1,10 +1,12 @@
 # 实测：`dsh-sandbox-escalation-fix` 的修复在 0.1.5-rc.2 上**有效**，只是被版本白名单挡住
 
+> **更正（同日追加，见 §6）**：上游 `main` 其实**已经**支持 `0.1.5-rc.1`/`0.1.5-rc.2`（提交 `3e6a394` 2026-09-10 17:19、`a59a7d2` 2026-09-11 00:03），本机看到的"白名单不含 rc"是 **2026-09-10 15:15 从 GitHub HEAD 安装的旧快照**（`0.1.5-alpha2-win-linux`）。因此原标题的"白名单挡住"只对**那个安装快照**成立，不是上游现状；用上游最新代码复测已通过（§6）。下面 §1-§5 保留当时的实验记录。
+
 - 日期：2026-09-11
 - 被测宿主：`@deepseek-ai/dsh@0.1.5-rc.2`（in-box 组件同为 0.1.5-rc.2）
-- 被测插件：`dsh-sandbox-escalation-fix@0.1.5-alpha2-win-linux`
+- 被测插件：`dsh-sandbox-escalation-fix@0.1.5-alpha2-win-linux`（本机快照）
 - 相关证据：`2026-09-11-latest-harness-compat.md`（T1 缺陷在最新宿主仍存在；T2 插件在最新宿主 fail-loud）
-- 结论：**插件逻辑对新宿主有效**——把它的版本白名单临时加上 `0.1.5-rc.1` / `0.1.5-rc.2` 后，同一个"同级 `sandbox_permissions`"探针从**被拒**变成**真的执行**，且工具 schema 不再向模型暴露该字段。挡路的只有白名单，不是实现。
+- 结论：**插件逻辑对新宿主有效**——把它的版本白名单临时加上 `0.1.5-rc.1` / `0.1.5-rc.2` 后，同一个"同级 `sandbox_permissions`"探针从**被拒**变成**真的执行**，且工具 schema 不再向模型暴露该字段。
 
 ## 1. 实验设置
 
@@ -53,6 +55,33 @@ node "$lab\install\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile escalate-
 
 ## 5. 局限
 
-- 实验室副本被改过白名单；`index.mjs.orig` 保留原文件，正式环境未做任何修改
+- §1-§4 的实验改过实验室副本的白名单；`index.mjs.orig` 保留原文件，正式环境未做任何修改
 - 只验证了"同级冗余升级"这一条路径；插件的其他兜底路径（如跨级升级请求）未逐个复测
 - 只测 `0.1.5-rc.2`，`0.1.5-rc.1` 未单独复测（两者 `dsh-client-connection` 同代，推测一致）
+
+## 6. 更正 + 上游最新代码复测（同日追加）
+
+### 6.1 事实核对
+
+| 项 | 事实 |
+|---|---|
+| 上游 `main` 是否支持 rc | **支持**：`3e6a394 chore: support DSH 0.1.5-rc.1`（2026-09-10 17:19）、`a59a7d2 chore: support DSH 0.1.5-rc.2`（2026-09-11 00:03）；`src/compatibility.ts` 与提交进仓的 `lib/index.mjs` 都含 `"0.1.5-rc.1"`/`"0.1.5-rc.2"`，`package.json` 的 peer 范围也已包含 |
+| 本机安装的插件 | `dsh-sandbox-escalation-fix@0.1.5-alpha2-win-linux`，白名单里 rc 条目数 **0** —— 它是 **2026-09-10 15:15** 通过 `dsh plugin add github:HakureiMonika/dsh-sandbox-escalation-fix` 装下的**当时 HEAD 快照**，早于上游那两个提交 |
+| 结论修正 | "被白名单挡住"只对**本机这个旧快照**成立；上游并不缺 rc 支持。原先据此给上游开的 issue（HakureiMonika/dsh-sandbox-escalation-fix#14）属于**误报**，已更正并关闭 |
+
+### 6.2 用上游最新代码复测（0.1.5-rc.2）
+
+把实验室 profile 里的插件目录换成上游 `main`（`a59a7d2`）提交进仓的 `lib/` + `package.json`（**未做任何白名单修改**），同一探针、同一宿主：
+
+```
+T1-DONE tool outcome: TOOL-ACCEPTED      # 命令真的执行
+pwsh schema 暴露 sandbox_permissions: false
+```
+
+证据：`raw/upstream-latest/session-upstream-plugin.jsonl.zstd`（`tool/result` = `"T1-TOOL-RAN\r\n"`，`isError:false`）、`raw/upstream-latest/pwsh-tool-schema.txt`（1049 字节，无升级字段）、`raw/upstream-latest/mock-escalation-server.txt`。
+
+### 6.3 对本机的处置建议
+
+1. **刷新插件安装**：`dsh plugin --profile web add github:HakureiMonika/dsh-sandbox-escalation-fix`（重新解析 HEAD）即可拿到 rc 支持；装完重启 DSH 生效。
+2. **按上游 README 的建议锁定 SHA**：`github:HakureiMonika/dsh-sandbox-escalation-fix#<sha>`，避免再次出现"装的是旧快照、行为与上游文档不一致"的情况——本次误判的根因就是这个。
+3. **对 daruma 的教训**：以后对第三方依赖做兼容性判断前，先核对**本地安装快照的版本/提交**，而不是拿上游仓库现状反推；本次 §1-§4 的结论若不做这一步，就会把"安装过期"错报成"上游缺支持"。
