@@ -30,7 +30,7 @@ import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
 import { createEventSink } from './event-sink.ts'
-import { detectHostCapabilities } from './host-capabilities.ts'
+import { mountWithWebTransport } from './host-mount.ts'
 
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
@@ -51,8 +51,6 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx)
   const eventSink = createEventSink(ctx.logger)
-  const capabilities = detectHostCapabilities(ctx)
-  ctx.logger.info(`dsh-daruma: host capabilities ${JSON.stringify(capabilities)}`)
 
   // Boot record: one line per plugin start, so audits can align restart
   // boundaries with the failover/give-up lines that follow.
@@ -214,5 +212,16 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     engine.clearScope(agent.id)
   })
 
-  mountRpc(ctx, { engine, currentChannel, status, getLlm: () => ctx.llm, getSettings: () => ctx.settings })
+  // The web transport arrives when the host provides it — on some host
+  // generations only after an async setup step — so the RPC channel mounts
+  // from an injection callback instead of a synchronous service read.
+  mountWithWebTransport(ctx, (transportCtx) => {
+    mountRpc(transportCtx, {
+      engine,
+      currentChannel,
+      status,
+      getLlm: () => ctx.llm,
+      getSettings: () => ctx.settings,
+    })
+  })
 }

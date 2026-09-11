@@ -104,11 +104,53 @@ Error: dsh: plugin tree failed to load: failed to apply loader entry sandbox-esc
 
 附带语义变化：rc.2 的 `rpc.handle(channel, handler)` 已不再接受第三个 options 参数，daruma 传入的 `{authority:'loopback'}` 被忽略（无害，loopback + 浏览器鉴权由 rc.2 的 `requestRejection` 统一兜底）。
 
+### 3.3b 惰性挂载修复后：仍有第二个上游缺陷挡住 0.1.5-*
+
+把 `mountRpc` 改为从 `ctx.inject(['connection'], …)` 挂载后重测（分支 `test/latest-harness-compat`，实现于 `packages/dsh-daruma/src/host-mount.ts` + `src/rpc.ts`），矩阵结果：
+
+| 宿主 | `POST /dsh-daruma/status` | headless failover e2e |
+|---|---|---|
+| 0.1.0-rc.7（= 生产那一代） | **HTTP 200**，返回真实状态载荷（`{"ok":true,"value":{"current":null,"backup":null,"channels":[{"channel":"mock::mock-a",…`） | PASS |
+| 0.1.5-rc.1 | HTTP 405（路由未注册） | PASS |
+| 0.1.5-rc.2 | HTTP 405（路由未注册） | PASS |
+
+证据：`raw/S-matrix-summary.txt`（脚本 `.dsh-lab/matrix.ps1`）。
+
+探针进一步定位（`raw/S-rpc-registration-probe.jsonl`）：
+
+```jsonl
+{"phase":"direct-route-ok", …}
+{"phase":"rpc-handle-error","message":"cannot get property \"webServer\" without inject"}
+```
+
+- `connection.rpc.handle('/dsh-daruma', …)` 在 0.1.5-rc.1/rc.2 上对**任何调用方**都抛 `cannot get property "webServer" without inject`：该版本的 `dsh-client-connection` 把 `webServer` 从插件级 `inject` 中去掉（改为在内部 `ctx.inject(['webServer'], …)` 里挂 `/api` 路由），而 `rpc.handle() → register()` 仍通过服务自身 ctx 取 `owner.webServer` 注册路由 → 必然失败。调用方额外注入 `webServer` 也无济于事（已实测）。
+- 直接在注入到的 `webServer` 上注册路由**可行**（探针 `POST /lab-direct/status` → 200），这正是 in-box `dsh-api-gateway` 在 rc.2 采用的写法。代价：该自建路由不经过宿主浏览器令牌/权威校验（`requestRejection` 只作用于 connection 自己注册的路由），等于把面板 RPC 暴露给本机任意进程（loopback-only）——安全权衡，需显式决策。
+
+### 3.3c 静态版本扫描：两个边界，以及比"最新版"更大的影响面
+
+用 `npm pack @deepseek-ai/dsh-client-connection@<ver>` 取各版本源码做静态判定（脚本 `.dsh-lab/sweep.ps1`，结果 `raw/S-version-sweep.txt`）：
+
+| 版本 | 插件级 inject | apply 是否 async | `rpc.handle` |
+|---|---|---|---|
+| 0.1.0-rc.7 / rc.8 | `["webServer"]` | 否 | OK |
+| 0.1.1-rc.1 / rc.2 | `["webServer"]` | 否 | OK |
+| 0.1.2-alpha.2 / alpha.5 / 0.1.2-rc.1 / 0.1.3-alpha.2 | `["webServer","credentials"]` | **是** | OK |
+| 0.1.5-alpha.1 / alpha.2 / 0.1.5-rc.1 / rc.2 | `["credentials"]` | **是** | **BROKEN** |
+
+（`0.1.3-alpha.1` 的 tarball 拉取失败，未纳入；其余在 peer 范围内的版本全覆盖。）
+
+两个边界由此确定：
+
+1. **服务延迟提供自 0.1.2-alpha.2 起** → 同步 `ctx.get('connection')` 的旧写法从那一代起就让面板失效；`peerDependencies` 声明的 `>=0.1.0-rc.7 <0.1.6` 覆盖的 0.1.2-* / 0.1.3-* / 0.1.5-* 区间里，面板从来不是"实测可用"状态（本次首次实测证实）。
+2. **`rpc.handle` 自 0.1.5-alpha.1 起不可用** → 即便修好惰性挂载，0.1.5-* 上的面板仍需宿主修复（或采用上面的无鉴权自建路由方案）。
+
 ### 3.4 建议修复
 
-1. **daruma**：`mountRpc` 改为惰性挂载——`ctx.inject(['connection'], (c) => mountRpc(c, deps))`（或 `ctx.on('internal/ready')`），彻底摆脱 apply 期服务可见性假设；`detectHostCapabilities` 改为注入后再取值，避免把"还没提供"误报成"宿主不支持"
-2. **escalation 插件**：把 `0.1.5-rc.1`/`0.1.5-rc.2`（及后续 rc）加入 `SUPPORTED_DSH_VERSIONS` 与 peer 范围；当前最新宿主上它是 fail-loud 不可用
-3. **上游**：T1 表明工具 schema 仍需按会话有效模式投影（会话已是 `danger-full-access` 时不应再向模型暴露同级升级字段）
+1. **daruma（已实现）**：`mountRpc` 改为惰性挂载——`ctx.inject(['connection'], (c) => mountRpc(c, deps))`，注册失败时**大声 warn** 而非静默；`detectHostCapabilities` 在注入后取值，避免把"还没提供"误报成"宿主不支持"。修复覆盖 0.1.2-alpha.2 → 0.1.5-rc.2 全线的挂载路径，且不回归 rc.7（面板 200 实测）
+2. **上游（必须）**：`0.1.5-alpha.1` 起 `dsh-client-connection` 的插件级 `inject` 去掉了 `webServer`，而 `register()` 仍用服务 ctx 取 `owner.webServer` → `connection.rpc.handle()` 对所有第三方插件不可用。修复二选一：恢复插件级 `webServer` 注入，或让 `register()` 在自身 `ctx.inject(['webServer'], …)` 作用域内注册路由
+3. **escalation 插件**：把 `0.1.5-rc.1`/`0.1.5-rc.2`（及后续 rc）加入 `SUPPORTED_DSH_VERSIONS` 与 peer 范围；当前最新宿主上它是 fail-loud 不可用
+4. **上游**：T1 表明工具 schema 仍需按会话有效模式投影（会话已是 `danger-full-access` 时不应再向模型暴露同级升级字段）
+5. **README / peer 范围（待定）**：failover 可用性与面板可用性不是同一个版本范围，当前 peerDependencies 把两者混在一起声明
 
 ## 4. 复现命令
 
@@ -130,13 +172,19 @@ node $dsh --profile escalate-plugin-latest "T2 probe"
 # web 面 + RPC 路由探针
 node $dsh --profile web-latest --no-open --port 3083
 # 再对 http://127.0.0.1:3083/dsh-daruma/status 发 POST（需先 GET /?token=... 换 cookie）
+
+# 多版本矩阵（RPC 路由 + headless failover，逐版本建独立 DSH_HOME）
+powershell -ExecutionPolicy Bypass -File .dsh-lab\matrix.ps1 -Versions 010rc7,015rc1,015rc2
+# 各版本 client-connection 静态扫描（npm pack）
+powershell -ExecutionPolicy Bypass -File .dsh-lab\sweep.ps1
 ```
 
-原始证据：`raw/`（会话归档、failover log、健康状态、探针时序、web 启动日志）。
+原始证据：`raw/`（会话归档、failover log、健康状态、探针时序、矩阵/扫描汇总、web 启动日志）。
 
 ## 5. 局限与未覆盖
 
 - 未做浏览器端 UI 端到端（无浏览器自动化驱动）：RPC 结论来自路由探针 + 服务时序探针 + 客户端模块清单三路互证，不是面板点击
-- 只实测 `0.1.5-rc.2`（`next`）；`0.1.5-rc.1`（`latest`）未单独复测，两者差异未评估
+- 运行时矩阵覆盖 `0.1.0-rc.7`、`0.1.5-rc.1`、`0.1.5-rc.2` 三档；其余版本（0.1.2-* / 0.1.3-*）只做了静态扫描。`0.1.3-alpha.2` 在本机装不上（依赖 `fs-ext` 需 node-gyp 原生构建），`0.1.3-alpha.1` 的 tarball 拉取失败
 - 生产 3080 实例与 `~/.dsh` 全程只读未改；T3.2 的对照请求是对生产的一次匿名 POST 探针
 - 沙箱升级缺陷的另一半（子代理 approval 恒为 `never` 的叠加因素）本次未复测
+- 修复合入后需要重跑一次 rc.7 的**面板**人工确认（本机 3080 重启后），路由探针只能证明通道已注册

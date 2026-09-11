@@ -115,3 +115,21 @@ custom event surface is logged and degraded without interrupting failover.
 `src/host-capabilities.ts` records optional host surfaces (RPC and conversation
 event registry) so client integrations can remain capability-driven as DSH
 releases evolve.
+
+The web transport is bound **late, from an injection callback**
+(`src/host-mount.ts`): the host's `dsh-client-connection` provides its
+`connection` service synchronously through `0.1.0-rc.x`, but awaits browser-auth
+setup first on `0.1.5-rc.1`/`0.1.5-rc.2`, so the service may not exist yet when
+this plugin's `apply` runs. Reading it with a synchronous `ctx.get('connection')`
+skipped the `/dsh-daruma` RPC channel — and with it the status dock and backup
+picker — on those hosts, so the mount waits for the service and records the
+capability snapshot at that point. Hosts without a web transport (headless)
+simply never fire the callback.
+
+> Known host limitation: on `0.1.5-rc.1`/`0.1.5-rc.2` the channel still cannot
+> register — those hosts dropped `webServer` from the connection plugin's own
+> inject list while `rpc.handle()` registers its route through the service
+> context, so every caller gets `cannot get property "webServer" without
+> inject`. daruma logs that failure loudly and keeps failover working; the
+> panel needs the host fix. See
+> `docs/aegis/evidence/2026-09-11-latest-harness-compat.md`.

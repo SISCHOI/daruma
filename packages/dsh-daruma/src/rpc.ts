@@ -106,7 +106,10 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
   const connection = ctx.get('connection') as
     | { rpc: { handle(channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult>, options: { authority: 'loopback' }): () => Promise<void> } }
     | undefined
-  if (connection === undefined) return // no web transport (headless)
+  // Callers mount from an injection callback (src/host-mount.ts), so the
+  // service is present here; the guard only covers a composition that dropped
+  // the transport between injection and mount.
+  if (connection === undefined) return
 
   const dispatch = async (endpoint: string, payload: unknown, _signal: AbortSignal): Promise<RpcResult> => {
     try {
@@ -156,8 +159,19 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
     }
   }
 
-  const dispose = connection.rpc.handle('/dsh-daruma', dispatch, { authority: 'loopback' })
-  ctx.effect(() => dispose, 'dsh-daruma: /dsh-daruma rpc channel')
+  try {
+    const dispose = connection.rpc.handle('/dsh-daruma', dispatch, { authority: 'loopback' })
+    ctx.effect(() => dispose, 'dsh-daruma: /dsh-daruma rpc channel')
+  } catch (error) {
+    // Known host regression: 0.1.5-rc.1/rc.2 dropped `webServer` from the
+    // connection plugin's own inject list while `rpc.handle()` still registers
+    // its route through the service context, so the call throws for every
+    // caller. Fail loudly instead of leaving the panel silently empty.
+    ctx.logger.warn(
+      `dsh-daruma: /dsh-daruma rpc channel could not be registered (${messageOf(error)}); `
+      + 'the status dock and backup picker stay disabled on this host generation',
+    )
+  }
 }
 
 // Reference to keep Channel import meaningful for consumers of the RPC shape.
