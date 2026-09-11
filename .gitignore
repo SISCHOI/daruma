@@ -8,3 +8,5 @@ coverage/
 .env
 .env.*
 !.env.example
+.dsh-lab/
+.tmp-*

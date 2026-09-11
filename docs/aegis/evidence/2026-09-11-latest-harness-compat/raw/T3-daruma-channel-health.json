@@ -1,0 +1,18 @@
+{
+  "healths": {
+    "mock::mock-a": {
+      "channel": "mock::mock-a",
+      "state": "COOLDOWN",
+      "consecutiveFailures": 1,
+      "cooldownUntilMs": 1789096264062,
+      "updatedAtMs": 1789096234062
+    },
+    "mock::mock-b": {
+      "channel": "mock::mock-b",
+      "state": "HEALTHY",
+      "consecutiveFailures": 0,
+      "cooldownUntilMs": 0,
+      "updatedAtMs": 1789096234101
+    }
+  }
+}
