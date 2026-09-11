@@ -3,7 +3,7 @@
 - 日期：2026-09-11
 - 分支：`feat/cross-platform`（基于 `fix/rpc-late-mount`，两者均未合并）
 - 结论：**源码、脚本、文档与 CI 全部去 Windows 化；Linux 与 macOS 由真实 runner 实跑验证（4/4 e2e 作业 + 6/6 verify 作业全绿）**
-- CI 运行：`ci` #34567264975 @ `cf194e0` → 10/10 success
+- CI 运行：`ci` #34567264975 @ `cf194e0` → 10/10 success（首次 #34563184490 的失败见 §3；本机 WSL 实测见 §3b）
 
 ## 1. 平台耦合审计
 
@@ -51,15 +51,35 @@ failover e2e: all checks passed
 
 首次运行（#34563184490 @ `04fb608`）**e2e 4/4 通过、verify 6/6 失败**，根因是 CI 步骤顺序：全新 checkout 没有 `packages/*/lib`，而 workspace 包之间通过构建产物互相解析（`daruma-core` 的 types/runtime 都在 `lib/`），于是 `typecheck` 报 `Cannot find module 'daruma-core'`。修复：verify 作业先 `pnpm run build` 再跑类型级 gate（commit `cf194e0`），并在 README 开发段落写明"全新 clone 必须先 build"。
 
+## 3b. 本机 WSL 实测（2026-09-11 追加）
+
+用户确认本机有 WSL。实测环境：WSL 2.7.12 / 内核 6.18.33.2-microsoft-standard-WSL2 / **Ubuntu 24.04.4 LTS**（此前未安装任何发行版，本次装入 `Ubuntu-24.04`），Node v24.19.0 + pnpm 11.7.0（发行版内安装，`/opt/node`）。
+
+在 Linux 文件系统上（`/root/daruma-wsl`）跑完整流程：
+
+| 步骤 | 结果 |
+|---|---|
+| `pnpm install --frozen-lockfile` + `pnpm run build` | 通过 |
+| `pnpm run test`（28 + 71 = 99） | 全绿 |
+| 互操作守卫：`--dsh /mnt/c/Users/shanzhiyu/nodejs/dsh` | **exit 2 + 修复提示**，且未留下任何 mock 进程（`:3099` 空闲） |
+| `e2e:failover` vs `0.1.0-rc.7`（发行版内安装） | 6/6 PASS，`platform=linux node=v24.19.0` |
+| `e2e:failover` vs `0.1.5-rc.2` | 6/6 PASS |
+| `$DSH_HOME` 默认路径 | `DSH_HOME=/tmp/daruma-home` → `/tmp/daruma-home/daruma/channel-health.json`；未设 → `/root/.dsh/daruma/channel-health.json` |
+
+原始逐行 transcript（含 `set -x`）：`raw/wsl-local-verification.txt`（Linux 侧生成后原字节拷回，UTF-8 无 BOM；扩展名用 `.txt` 是因为 `.gitignore` 忽略 `*.log`）。
+
+**过程中发现并修掉的真问题**：WSL 会追加 Windows 的 PATH，裸 `dsh` 解析到 `/mnt/c/Users/shanzhiyu/nodejs/dsh`，用 Linux 的 node 去加载 Windows 安装 → `sharp`/`koffi` 平台二进制加载失败，报错形态是 `plugin tree failed to load`，看起来像 daruma 的问题。第一版守卫放在 `dshCommand()` 里、**在 mock server 启动之后**才拒绝并 `process.exit(2)`，于是留下一个仍占用 `:3099` 的孤儿 mock，导致后续 e2e 的新 mock 绑定失败、fallback 渠道被误判为 COOLDOWN（假失败）。修复：`assertUsableHost()` 提到分配任何资源之前（parse 之后立即校验），并补测"拒绝后 `:3099` 必须空闲"。
+
 ## 4. 证据
 
 `raw/`
 - `ci-run-jobs.json` — 成功运行的 10 个作业及其结论（GitHub API 原始响应）
 - `ci-failover-e2e-<os>-dsh-<ver>-summary.txt` ×4 — 各 e2e 作业的 PASS/断言原文（含 `platform=linux|darwin`）
+- `wsl-local-verification.txt` — 本机 WSL Ubuntu 24.04 全流程逐行 transcript
 
 ## 5. 局限与未覆盖
 
-- **macOS/Linux 的 Web 面板**未做浏览器端验证（CI 无头环境）：跨平台证据覆盖单测、类型、构建与 headless 故障转移全链路；面板的 RPC 注册问题见 `2026-09-11-latest-harness-compat.md`（属宿主缺陷，与平台无关）
-- 本机没有 WSL（`E_ACCESSDENIED`）也没有 Docker，Linux 实测只能依赖 CI runner
+- **macOS/Linux 的 Web 面板**未做浏览器端验证（CI 与 WSL 都无头）：跨平台证据覆盖单测、类型、构建与 headless 故障转移全链路；面板的 RPC 注册问题见 `2026-09-11-latest-harness-compat.md`（属宿主缺陷，与平台无关）
+- 本机 WSL 的 Linux 实测覆盖 Ubuntu 24.04；CI 另外覆盖 macos-latest，macOS 未在本机实跑
 - CI 的 e2e 只跑 `ubuntu` 与 `macos`（Windows 的 e2e 已在生产实例与本机 lab 长期实测过，并未纳入矩阵以控制时长）
 - `0.1.3-alpha.1/alpha.2` 未纳入 e2e 矩阵（前者 tarball 拉取失败，后者依赖 `fs-ext` 原生构建，本机与 CI 默认环境都装不上）

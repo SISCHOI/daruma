@@ -54,9 +54,11 @@ dsh plugin --profile web add dsh-daruma
 
 ## 当前状态
 
-已实现并测试：90 个单测（`daruma-core` 28 + `dsh-daruma` 62），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+已实现并测试：99 个单测（`daruma-core` 28 + `dsh-daruma` 71），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
 
-跨平台：Windows / Linux / macOS 均支持；CI 在三个系统上跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 实跑。
+跨平台：Windows / Linux / macOS 均支持；CI 在三个系统上跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 实跑；本机 WSL 2（Ubuntu 24.04）另做了一遍全流程实测。
+
+> **WSL 提醒**：WSL 会追加 Windows 的 PATH，裸 `dsh` 可能命中 `/mnt/c/...` 下的 Windows 安装（用 Linux 的 node 加载它的 sharp/koffi 必然失败）。`e2e:failover` 会在启动前拒绝 `/mnt/` 宿主并给出修复命令；请在发行版内装宿主：`npm install --global @deepseek-ai/dsh@0.1.0-rc.7 && export PATH="$(npm prefix --global)/bin:$PATH"`。
 
 已发布到 npm：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)。
 

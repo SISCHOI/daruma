@@ -54,6 +54,23 @@ function dshCommand() {
   return { command: target, prefixArgs: [] }
 }
 
+/**
+ * Reject a setup that cannot work before anything is spawned: WSL interop
+ * appends the Windows PATH, so a bare `dsh` can resolve to the Windows install
+ * under `/mnt/…`, whose platform binaries (sharp, koffi) fail to load under
+ * Linux with a boot error that reads like a daruma problem.
+ */
+function assertUsableHost() {
+  const target = options.dsh
+  if (process.platform !== 'win32' && target.startsWith('/mnt/')) {
+    console.error(`refusing --dsh ${target}: that is a Windows install reached through WSL interop`)
+    console.error('install the host inside the Linux distro and put its bin directory first on PATH, e.g.')
+    console.error('  npm install --global @deepseek-ai/dsh@0.1.0-rc.7')
+    console.error('  export PATH="$(npm prefix --global)/bin:$PATH"')
+    process.exit(2)
+  }
+}
+
 function write(path, contents) {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, contents, 'utf8')
@@ -96,6 +113,11 @@ function check(label, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail === '' ? '' : ` — ${detail}`}`)
   if (!ok) failures.push(label)
 }
+
+// Validate the setup before allocating anything, so a refusal leaves no
+// orphaned mock server behind.
+assertUsableHost()
+const { command, prefixArgs } = dshCommand()
 
 const scratch = mkdtempSync(join(tmpdir(), 'daruma-e2e-'))
 const dshHome = join(scratch, 'home')
@@ -162,7 +184,6 @@ agent-default-model:
   mockServer.stderr.on('data', (chunk) => process.stderr.write(`[mock] ${chunk}`))
   if (!await waitForServer(mockPort)) throw new Error(`mock LLM server did not come up on :${mockPort}`)
 
-  const { command, prefixArgs } = dshCommand()
   const task = 'Reply with exactly: OK'
   const args = [...prefixArgs, '--profile', profile, task]
   console.log(`running: ${command} ${args.join(' ')} (DSH_HOME=${dshHome})`)
