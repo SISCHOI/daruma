@@ -25,6 +25,18 @@ Useful flags: `--dsh <command|path-to-bin.js>` (test a specific host build),
 `--mock-port <port>`, `--keep` (keep the temp home for inspection). The
 production `~/.dsh` is never touched.
 
+> **Running inside WSL?** WSL appends the Windows PATH, so a bare `dsh` can
+> resolve to the **Windows** install under `/mnt/c/…`; Linux node then fails to
+> load its `sharp`/`koffi` binaries. The script refuses such a host before
+> starting anything (exit 2) and prints the fix — install the host inside the
+> distro and put its bin directory first on PATH:
+>
+> ```bash
+> npm install --global @deepseek-ai/dsh@0.1.0-rc.7
+> export PATH="$(npm prefix --global)/bin:$PATH"
+> pnpm run e2e:failover
+> ```
+
 The manual walkthrough below is the same scenario step by step, for when you
 want to watch it in the browser or debug a specific stage.
 
