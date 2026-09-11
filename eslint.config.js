@@ -3,7 +3,9 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/lib/**', '**/dist/**', '**/node_modules/**'] },
+  // `.dsh-lab` holds local-only host test benches (gitignored): never shipped,
+  // never linted.
+  { ignores: ['**/lib/**', '**/dist/**', '**/node_modules/**', '.dsh-lab/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

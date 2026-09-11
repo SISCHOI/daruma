@@ -1,6 +1,22 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { defaultLogFile } from './config.ts'
+import { defaultLogFile, defaultStateFile } from './config.ts'
 import { resolveConfig } from './config.ts'
+
+describe('defaultStateFile', () => {
+  it('honors an explicit $DSH_HOME so isolated profiles stay isolated', () => {
+    const home = join('tmp', 'dsh-home')
+    expect(defaultStateFile({ DSH_HOME: home })).toBe(join(home, 'daruma', 'channel-health.json'))
+  })
+
+  it('ignores a blank $DSH_HOME, like the host does', () => {
+    const fallback = join(homedir(), '.dsh', 'daruma', 'channel-health.json')
+    expect(defaultStateFile({ DSH_HOME: '' })).toBe(fallback)
+    expect(defaultStateFile({ DSH_HOME: '   ' })).toBe(fallback)
+    expect(defaultStateFile({})).toBe(fallback)
+  })
+})
 
 describe('resolveConfig', () => {
   it('applies defaults for an empty config', () => {

@@ -26,8 +26,19 @@ export interface ResolvedConfig extends RecoveryPolicyConfig {
   readonly logFile: string
 }
 
-export function defaultStateFile(): string {
-  return join(homedir(), '.dsh', 'daruma', 'channel-health.json')
+/**
+ * Resolve the harness home the way the host does (`dsh-home-paths`): an
+ * explicit `stateFile` wins, then `$DSH_HOME`, then `~/.dsh`. Honoring
+ * `DSH_HOME` keeps test and sandbox profiles isolated on every platform
+ * instead of writing into the user's real `~/.dsh`.
+ *
+ * @param env - environment mapping to read `$DSH_HOME` from.
+ * @returns the absolute default state-file path.
+ */
+export function defaultStateFile(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.DSH_HOME?.trim()
+  const home = configured !== undefined && configured !== '' ? configured : join(homedir(), '.dsh')
+  return join(home, 'daruma', 'channel-health.json')
 }
 
 export function defaultLogFile(stateFile: string): string {
