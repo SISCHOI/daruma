@@ -1,0 +1,5 @@
+mock-escalation listening on http://127.0.0.1:3097 (tool=pwsh, sandbox_permissions=danger-full-access)
+[t1] model=mock-t1 stream=true stage=first
+[t1] model=mock-t1 stream=true stage=first
+[t1] model=mock-t1 stream=true stage=after-tool
+[t1] tool result seen: "T1-TOOL-RAN\r\n"
