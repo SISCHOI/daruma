@@ -1,0 +1,3 @@
+{"kind":"boot","t":1789096233749,"pid":30648,"channels":["mock::mock-a","mock::mock-b"],"failureBudget":1,"cooldownMs":30000,"giveUpBudget":8}
+{"kind":"failover","t":1789096234064,"agentId":"session-5bd0d0d0-36d2-43cf-a243-4b8d08435bf2","from":"mock::mock-a","to":"mock::mock-b","reason":"RATE_LIMIT","turn":1,"step":1,"failoverCount":1,"giveUpBudget":8}
+{"kind":"boot","t":1789096247968,"pid":25608,"channels":["mock::mock-a","mock::mock-b"],"failureBudget":1,"cooldownMs":30000,"giveUpBudget":8}

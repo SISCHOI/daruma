@@ -14,7 +14,9 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "lint": "eslint .",
-    "check:no-bom": "node scripts/check-no-bom.cjs"
+    "check:no-bom": "node scripts/check-no-bom.cjs",
+    "start:test": "node scripts/start-daruma-test.mjs",
+    "e2e:failover": "node scripts/e2e-failover.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

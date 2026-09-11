@@ -1,0 +1,9 @@
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8900008Z mock completion from mock-b
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8901914Z PASS  task exits 0 — status=0 
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8904762Z PASS  task text came from the fallback channel — mock completion from mock-b
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8906358Z PASS  failover log has a boot line
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8910710Z PASS  failover log records mock-a -> mock-b (RATE_LIMIT) — {"kind":"failover","t":1789105645780,"agentId":"session-b49d384c-9cea-4ed9-8899-703f49cd2139","from":"mock::mock-a","to":"mock::mock-b","reason":"RATE_LIMIT","turn":1,"step":1,"failoverCount":1,"giveUpBudget":8}
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8916380Z PASS  tripped channel is persisted as COOLDOWN — {"channel":"mock::mock-a","state":"COOLDOWN","consecutiveFailures":1,"cooldownUntilMs":1789105675779,"updatedAtMs":1789105645779}
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.8919136Z PASS  fallback channel is HEALTHY — {"channel":"mock::mock-b","state":"HEALTHY","consecutiveFailures":0,"cooldownUntilMs":0,"updatedAtMs":1789105645802}
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.9041259Z platform=linux node=v24.20.0 dsh=dsh
+failover e2e (ubuntu-latest, dsh 0.1.0-rc.7)	Failover end-to-end	2026-09-11T05:47:25.9042715Z failover e2e: all checks passed

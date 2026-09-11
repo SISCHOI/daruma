@@ -1,0 +1,9 @@
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6121230Z mock completion from mock-b
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6125440Z PASS  task exits 0 — status=0 
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6127770Z PASS  task text came from the fallback channel — mock completion from mock-b
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6129270Z PASS  failover log has a boot line
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6138490Z PASS  failover log records mock-a -> mock-b (RATE_LIMIT) — {"kind":"failover","t":1789105644540,"agentId":"session-d9ff4376-ee42-46b9-bd7d-3770d4d04548","from":"mock::mock-a","to":"mock::mock-b","reason":"RATE_LIMIT","turn":1,"step":1,"failoverCount":1,"giveUpBudget":8}
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6178090Z PASS  tripped channel is persisted as COOLDOWN — {"channel":"mock::mock-a","state":"COOLDOWN","consecutiveFailures":1,"cooldownUntilMs":1789105674539,"updatedAtMs":1789105644539}
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6183310Z PASS  fallback channel is HEALTHY — {"channel":"mock::mock-b","state":"HEALTHY","consecutiveFailures":0,"cooldownUntilMs":0,"updatedAtMs":1789105644554}
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6379870Z platform=darwin node=v24.20.0 dsh=dsh
+failover e2e (macos-latest, dsh 0.1.5-rc.2)	Failover end-to-end	2026-09-11T05:47:24.6381790Z failover e2e: all checks passed

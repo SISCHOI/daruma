@@ -54,7 +54,9 @@ dsh plugin --profile web add dsh-daruma
 
 ## 当前状态
 
-已实现并测试：82 个单测（`daruma-core` 28 + `dsh-daruma` 54），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+已实现并测试：90 个单测（`daruma-core` 28 + `dsh-daruma` 62），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+
+跨平台：Windows / Linux / macOS 均支持；CI 在三个系统上跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 实跑。
 
 已发布到 npm：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)。
 
@@ -64,6 +66,8 @@ dsh plugin --profile web add dsh-daruma
 pnpm install
 pnpm build
 pnpm test
+pnpm run start:test     # mock LLM + daruma-test web profile（任何系统，Ctrl+C 一起停）
+pnpm run e2e:failover   # headless 故障转移验证（临时 DSH home，不碰 ~/.dsh）
 ```
 
 ## License

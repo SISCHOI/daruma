@@ -20,7 +20,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import { channelIdOf, channelIdOfConfig, toCallConfig, toFailureSignal } from './mapping.ts'
+import { channelIdOf, channelIdOfConfig, toFailoverConfig, toFailureSignal, type EffortDisposition } from './mapping.ts'
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
@@ -30,7 +30,7 @@ import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
 import { createEventSink } from './event-sink.ts'
-import { detectHostCapabilities } from './host-capabilities.ts'
+import { mountWithWebTransport } from './host-mount.ts'
 
 export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
@@ -44,6 +44,34 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 
+/**
+ * Record what the failover target did with the caller's reasoning effort.
+ *
+ * A dropped effort is a real change to the request (the target runs at its own
+ * default level instead of the user's), so it has to be visible in the server
+ * log rather than folded silently into the channel-switch line. `none-requested`
+ * and `kept` are the ordinary cases and stay quiet.
+ */
+function logEffortDisposition(ctx: Context, target: Channel, effort: EffortDisposition): void {
+  switch (effort.kind) {
+    case 'none-requested':
+    case 'kept':
+      return
+    case 'dropped-unsupported':
+      ctx.logger.warn(
+        `dsh-daruma: ${target.id} does not accept reasoning effort "${effort.effort}" `
+        + `(advertised: ${effort.accepted.length > 0 ? effort.accepted.join(', ') : 'none'}); `
+        + 'dropping it for the failover request so it can dispatch',
+      )
+      return
+    case 'dropped-unverifiable':
+      ctx.logger.warn(
+        `dsh-daruma: could not resolve reasoning efforts for ${target.id}; `
+        + `dropping "${effort.effort}" so the failover request can dispatch`,
+      )
+  }
+}
+
 export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const config = resolveConfig(rawConfig)
   const store = new JsonFileChannelHealthStore(config.stateFile)
@@ -51,8 +79,6 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx)
   const eventSink = createEventSink(ctx.logger)
-  const capabilities = detectHostCapabilities(ctx)
-  ctx.logger.info(`dsh-daruma: host capabilities ${JSON.stringify(capabilities)}`)
 
   // Boot record: one line per plugin start, so audits can align restart
   // boundaries with the failover/give-up lines that follow.
@@ -89,11 +115,12 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     const armed = pending.get(payload.agent.id)
     if (armed) {
       pending.delete(payload.agent.id)
-      const swapped = toCallConfig(current, armed)
+      const { config: swapped, effort } = await toFailoverConfig(current, armed, ctx.llm)
       currentChannel.set(payload.agent.id, channelIdOfConfig(swapped))
       ctx.logger.warn(
         `dsh-daruma: switching ${current.provider}/${current.model} -> ${swapped.provider}/${swapped.model}`,
       )
+      logEffortDisposition(ctx, armed, effort)
       return swapped
     }
     currentChannel.set(payload.agent.id, channelIdOfConfig(current))
@@ -214,5 +241,16 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     engine.clearScope(agent.id)
   })
 
-  mountRpc(ctx, { engine, currentChannel, status, getLlm: () => ctx.llm, getSettings: () => ctx.settings })
+  // The web transport arrives when the host provides it — on some host
+  // generations only after an async setup step — so the RPC channel mounts
+  // from an injection callback instead of a synchronous service read.
+  mountWithWebTransport(ctx, (transportCtx) => {
+    mountRpc(transportCtx, {
+      engine,
+      currentChannel,
+      status,
+      getLlm: () => ctx.llm,
+      getSettings: () => ctx.settings,
+    })
+  })
 }

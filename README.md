@@ -109,8 +109,9 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 ## Status
 
 - On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest 0.1.5)
-- 82 unit tests (`daruma-core` 28 + `dsh-daruma 54`), all green
-- End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md))
+- Cross-platform: Windows, Linux and macOS — CI runs typecheck, lint, unit tests, build and the BOM guard on all three, and the failover end-to-end check on Linux and macOS
+- Unit tests: `daruma-core` 28 + `dsh-daruma` 62, all green
+- End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md)) — reproducible anywhere with `pnpm run e2e:failover`
 - Battle-tested in production on the author's DSH web instance: survived a real rate-limit storm on the primary (15 consecutive failures, multiple trips) and self-healed back to `HEALTHY` on the first successful request afterwards
 
 ## Development
@@ -118,13 +119,39 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 82 tests across both packages
+pnpm test            # 90 tests across both packages
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # repo hygiene: no file may start with a UTF-8 BOM
 ```
 
 The BOM guard also runs on `prepublishOnly` of both packages.
+
+`pnpm build` must run once in a fresh clone before `pnpm test` / `pnpm typecheck`:
+the workspace packages resolve each other through their built `lib/`.
+
+### Local test environments (any OS)
+
+```bash
+pnpm run start:test     # mock LLM + the daruma-test web profile (Ctrl+C stops both)
+pnpm run e2e:failover   # headless failover check: builds a throwaway DSH home in the OS temp dir
+```
+
+Both are plain Node scripts, so they behave the same on Windows, Linux and
+macOS; `scripts/start-daruma-test.ps1` remains as a Windows wrapper around the
+same launcher. `e2e:failover` accepts `--dsh <command|path-to-bin.js>` to test
+against a specific DSH build, and `--keep` to inspect the generated profile.
+
+### Supported DSH hosts
+
+| Host line | Failover engine | Web panel (`/dsh-daruma`) |
+|---|---|---|
+| `0.1.0-rc.7` … `0.1.1-rc.2` | works | works |
+| `0.1.2-alpha.2` … `0.1.3-*` | works | works |
+| `0.1.5-alpha.1` … `0.1.5-rc.2` | works | **blocked upstream** — `connection.rpc.handle()` throws `cannot get property "webServer" without inject` on those hosts for every third-party plugin; daruma logs it loudly and keeps failing over |
+
+Measured with `pnpm run e2e:failover` plus a route probe; details and raw
+evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md).
 
 ## Why "daruma"
 
@@ -241,8 +268,9 @@ dsh plugin --profile web add dsh-daruma
 ## 状态
 
 - npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest 0.1.5）
-- 82 个单元测试（`daruma-core` 28 + `dsh-daruma 54`），全绿
-- 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）
+- 跨平台：Windows / Linux / macOS —— CI 在三个系统上都跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 上实跑
+- 单元测试（`daruma-core` 28 + `dsh-daruma` 62），全绿
+- 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）——现在任何系统上一条 `pnpm run e2e:failover` 即可复现
 - 在作者的 DSH web 实例生产实战：扛过一次主渠道真实限流风暴（15 连败、多次跳闸），事后第一个成功请求即自愈回 `HEALTHY`
 
 ## 开发
@@ -250,13 +278,32 @@ dsh plugin --profile web add dsh-daruma
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 两个包共 82 个测试
+pnpm test            # 两个包共 90 个测试
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # 仓库卫生：任何文件不得带 UTF-8 BOM
 ```
 
 BOM 守卫同时挂在两个包的 `prepublishOnly` 上。
+
+### 本地测试环境（任何系统）
+
+```bash
+pnpm run start:test     # mock LLM + daruma-test web profile（Ctrl+C 一起停）
+pnpm run e2e:failover   # headless 故障转移验证：在系统临时目录里建一次性 DSH home
+```
+
+两个都是纯 Node 脚本，Windows / Linux / macOS 行为一致；`scripts/start-daruma-test.ps1` 保留为 Windows 上的薄封装。`e2e:failover` 支持 `--dsh <命令|bin.js 路径>` 指定宿主版本，`--keep` 保留生成的 profile 供排查。
+
+### 支持的 DSH 宿主
+
+| 宿主代次 | 故障转移引擎 | Web 面板（`/dsh-daruma`） |
+|---|---|---|
+| `0.1.0-rc.7` … `0.1.1-rc.2` | 可用 | 可用 |
+| `0.1.2-alpha.2` … `0.1.3-*` | 可用 | 可用 |
+| `0.1.5-alpha.1` … `0.1.5-rc.2` | 可用 | **上游阻塞** —— 这些宿主的 `connection.rpc.handle()` 对任何第三方插件都抛 `cannot get property "webServer" without inject`；daruma 会明确报警并继续保证故障转移 |
+
+实测方式：`pnpm run e2e:failover` + 路由探针；细节与原始证据见 [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md)。
 
 ## 为什么叫 "daruma"
 

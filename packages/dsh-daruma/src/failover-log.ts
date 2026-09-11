@@ -12,8 +12,8 @@
  * failover.
  */
 
-import { appendFileSync, renameSync, statSync } from 'node:fs'
-import { mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync, renameSync, statSync } from 'node:fs'
+import { dirname } from 'node:path'
 
 /** Rotate when the log exceeds this size (kept to one `.1` generation). */
 export const FAILOVER_LOG_ROTATE_BYTES = 2 * 1024 * 1024
@@ -74,7 +74,7 @@ export class JsonlFailoverLogStore {
   append(record: FailoverLogRecord): void {
     try {
       this.rotateIfNeeded()
-      mkdirSync(dirnameOf(this.file), { recursive: true })
+      mkdirSync(dirname(this.file), { recursive: true })
       appendFileSync(this.file, `${JSON.stringify(record)}\n`, 'utf8')
     } catch {
       // A lost log line must never take down recovery.
@@ -86,12 +86,8 @@ export class JsonlFailoverLogStore {
       if (statSync(this.file).size < FAILOVER_LOG_ROTATE_BYTES) return
       renameSync(this.file, `${this.file}.1`)
     } catch {
-      // Missing file, or Windows lock on rename: keep appending (no rotation).
+      // Missing file, or a platform that refuses the replacement rename:
+      // keep appending (no rotation).
     }
   }
-}
-
-function dirnameOf(file: string): string {
-  const index = Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\'))
-  return index <= 0 ? '.' : file.slice(0, index)
 }

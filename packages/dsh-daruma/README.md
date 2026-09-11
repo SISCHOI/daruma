@@ -16,8 +16,22 @@ daruma. daruma then:
    arms the next routable channel (the user-chosen backup first, then the
    configured chain) and returns `{ kind: 'retry' }`;
 3. on the retry turn, the `agent/request` waterfall swaps the request config
-   onto the armed channel;
+   onto the armed channel — dropping the caller's `reasoningEffort` when that
+   target does not advertise the level (see below);
 4. appends one JSON line per decision to the audit log (see below).
+
+**A failover target has to accept the request.** DSH validates an explicit
+`reasoningEffort` against the **target's** own capability and refuses the
+request before any provider I/O; that refusal is raised outside
+`agent/request-error`, so a swapped request carrying an effort the target
+cannot take kills the turn without ever reaching the provider — the failover
+channel never dispatches, and the channel that is actually broken keeps looking
+healthy. daruma therefore reads the target's model metadata on every swap: a
+supported effort is kept, an unsupported (or unresolvable) one is dropped so
+the target can use its own default, and the drop is logged —
+`dsh-daruma: mt::glm-5.3 does not accept reasoning effort "high" …`. Every
+other field (`maxTokens`, temperature, stop sequences) is passed through
+untouched.
 
 **Self-healing:** the host exposes no request-success event, so success is
 inferred — an agent whose previous model request never tripped
@@ -115,3 +129,21 @@ custom event surface is logged and degraded without interrupting failover.
 `src/host-capabilities.ts` records optional host surfaces (RPC and conversation
 event registry) so client integrations can remain capability-driven as DSH
 releases evolve.
+
+The web transport is bound **late, from an injection callback**
+(`src/host-mount.ts`): the host's `dsh-client-connection` provides its
+`connection` service synchronously through `0.1.0-rc.x`, but awaits browser-auth
+setup first on `0.1.5-rc.1`/`0.1.5-rc.2`, so the service may not exist yet when
+this plugin's `apply` runs. Reading it with a synchronous `ctx.get('connection')`
+skipped the `/dsh-daruma` RPC channel — and with it the status dock and backup
+picker — on those hosts, so the mount waits for the service and records the
+capability snapshot at that point. Hosts without a web transport (headless)
+simply never fire the callback.
+
+> Known host limitation: on `0.1.5-rc.1`/`0.1.5-rc.2` the channel still cannot
+> register — those hosts dropped `webServer` from the connection plugin's own
+> inject list while `rpc.handle()` registers its route through the service
+> context, so every caller gets `cannot get property "webServer" without
+> inject`. daruma logs that failure loudly and keeps failover working; the
+> panel needs the host fix. See
+> `docs/aegis/evidence/2026-09-11-latest-harness-compat.md`.
