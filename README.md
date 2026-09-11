@@ -127,6 +127,9 @@ pnpm check:no-bom    # repo hygiene: no file may start with a UTF-8 BOM
 
 The BOM guard also runs on `prepublishOnly` of both packages.
 
+`pnpm build` must run once in a fresh clone before `pnpm test` / `pnpm typecheck`:
+the workspace packages resolve each other through their built `lib/`.
+
 ### Local test environments (any OS)
 
 ```bash
