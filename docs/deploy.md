@@ -125,6 +125,41 @@ pnpm publish --config.//registry.npmjs.org/:_authToken=$env:NPM_TOKEN
 Retire stale tokens in the npm web UI (Access Tokens) instead of leaving them in
 `~/.npmrc`.
 
+### Logging in is not enough: publish needs a second factor
+
+A successful login (`npm whoami` → `sischoi`) can still fail the publish itself:
+
+```
+[E403] 403 Forbidden - PUT https://registry.npmjs.org/dsh-daruma
+Two-factor authentication or granular access token with bypass 2fa enabled is
+required to publish packages.
+```
+
+npm now requires either a one-time password **per publish** or a granular token
+that is allowed to bypass 2FA. Pick one:
+
+```powershell
+# a) pass a fresh 6-digit code from the authenticator (expires in ~30 s, so
+#    run it yourself rather than relaying the code through someone else)
+pnpm publish --otp=123456
+
+# b) create a granular token in the npm web UI: Access Tokens -> Granular,
+#    "Bypass 2FA" enabled, Packages = dsh-daruma, permission = Read and write
+npm config set //registry.npmjs.org/:_authToken=<token>
+pnpm publish          # no OTP prompt afterwards
+```
+
+Notes from the 0.1.7 release:
+
+- `www.npmjs.com` can be unreachable from a mainland-China network while
+  `registry.npmjs.org` still answers: web login links then have to be opened on
+  another device (a phone session works — the CLI polls, so the browser does not
+  have to be the publishing machine).
+- The web-login URL is bound to the waiting CLI process; if that process exits
+  the link stops working, so generate a fresh one instead of reusing it.
+- `npm login --auth-type=legacy` also demands an OTP when the account has 2FA
+  enabled, so it is not an OTP-free fallback.
+
 ### Rollback
 
 Within 72 hours: `npm unpublish dsh-daruma@x.y.z`. After that the version number
