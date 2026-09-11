@@ -159,6 +159,19 @@ Notes from the 0.1.7 release:
   the link stops working, so generate a fresh one instead of reusing it.
 - `npm login --auth-type=legacy` also demands an OTP when the account has 2FA
   enabled, so it is not an OTP-free fallback.
+- Handing a token to npm as a CLI flag (`--//registry.npmjs.org/:_authToken=…`)
+  is unreliable when the command is spawned from Node/cmd — npm then reports
+  `ENEEDAUTH` even though the flag is spelled correctly. Use a throwaway
+  userconfig instead, which also keeps the real `~/.npmrc` untouched:
+
+  ```powershell
+  $tmp = "$env:TEMP\npmrc-publish"
+  "registry=https://registry.npmjs.org/`n//registry.npmjs.org/:_authToken=$env:NPM_TOKEN" | Set-Content $tmp
+  $env:NPM_CONFIG_USERCONFIG = $tmp
+  cd packages\dsh-daruma; npm publish
+  Remove-Item $tmp          # a secret lived here: delete right after
+  ```
+
 
 ### Rollback
 
