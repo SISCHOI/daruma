@@ -177,3 +177,39 @@ Notes from the 0.1.7 release:
 
 Within 72 hours: `npm unpublish dsh-daruma@x.y.z`. After that the version number
 cannot be reused — publish `x.y.(z+1)` with a revert instead.
+
+### Staged publishing is mandatory — and 2FA-gated (measured 2026-09-17)
+
+A direct `npm publish` of `daruma-core@0.1.6` / `dsh-daruma@0.1.8` was refused with
+`E_STAGE_REQUIRED` ("This token can only publish to a staging area"). The registry now
+requires staged publishing, and its approval step needs proof-of-presence:
+
+| credential | `stage publish` | `stage approve` | `publish` | `access set` |
+|---|---|---|---|---|
+| granular token (bypass 2FA) | ✅ | ❌ 404 | ❌ E_STAGE_REQUIRED | ❌ 403 |
+| session token (web login) | ✅ | ❌ 404 | — | ❌ 403 |
+
+`approve` requires **2FA enabled on the account**. An account without 2FA gets a bare
+`404 staged version "…" not found` (not an "enable 2FA" message), and `--otp` never
+prompts because the registry answers 404 instead of `EOTP`. Enable 2FA from
+`www.npmjs.com` — which **is unreachable from this machine while `registry.npmjs.org`
+answers fine** — so do the website side on another device (a phone works), then run the
+approve here with the 6-digit code.
+
+`npm access set mfa=none|publish|automation <pkg>` is the CLI lever for a package's
+publish policy, but it is itself a sensitive operation (403 without 2FA).
+
+Other traps measured on this machine:
+
+- **`cd packages/<pkg>; npm publish` goes to the mirror.** npm resolves "project" config
+  from the *current directory only*, so it falls back to the user-level `~/.npmrc`
+  (`registry.npmmirror.com`). `pnpm publish` is unaffected (it reads the workspace root).
+  From a package directory, pass `--registry https://registry.npmjs.org/`.
+- **The execution policy blocks the `.ps1` shims** (`npm.ps1`): bare `npm` in PowerShell
+  dies with `UnauthorizedAccess`. Use `cmd /c "npm …"` (or `npm.cmd`).
+- **`Set-Content` without `-Encoding`** writes UTF-16LE+BOM under PS 5.1; the throwaway
+  userconfig that carries the token needs `-Encoding ascii`, and must be deleted right after.
+
+Staged versions share the semver unique index with published ones: while
+`daruma-core@0.1.6` is staged, that exact version cannot be published directly, so a
+blocked release either approves/rejects the stage or takes the next patch number.
