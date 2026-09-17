@@ -8,8 +8,6 @@
 
 # Daruma — automatic failover & backup channels for DeepSeek Harness
 
-> **Fall seven times, stand up eight.** — 七転八起
-
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) is a great place to run long agent tasks — until a third-party API subscription hiccups. Rate limits (`429`), server errors (`500`), network jitter, provider-side model stalls, moderation gatekeeping: any of them kills a long-running task mid-flight. **Daruma catches the failure and fails over to another channel**, so the session keeps going without you.
 
 ## What it does
@@ -169,7 +167,7 @@ evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aeg
 
 ## Why "daruma"
 
-A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a roly-poly toy rooted in a proverb — *fall seven times, stand up eight*. Your long tasks are the same: hit them with a `429`, and they get back up.
+A [Daruma doll](https://en.wikipedia.org/wiki/Daruma_doll) is a traditional Japanese roly-poly doll associated with perseverance. Your long tasks are the same: hit them with a `429`, and they get back up.
 
 ## License
 
@@ -180,8 +178,6 @@ MIT © 2026 SISCHOI
 <a id="中文"></a>
 
 # daruma — DeepSeek Harness 的自动故障转移与备用渠道插件
-
-> **七転八起** —— 摔倒七次，站起来八次。
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）跑长任务很顺手 —— 直到第三方 API 订阅抽风。限流（`429`）、服务端错误（`500`）、网络抖动、供应商侧模型卡死、内容审核拦截：任何一个都能把长任务拦腰打断。**daruma 接住失败并切换到其他渠道**，会话无需你介入就能继续。
 
@@ -331,7 +327,7 @@ pnpm run e2e:failover
 
 ## 为什么叫 "daruma"
 
-[达摩不倒翁](https://en.wikipedia.org/wiki/Daruma_doll)来自一句谚语 —— *摔倒七次，站起来八次*（七転八起）。你的长任务也一样：挨一记 `429`，再爬起来就是了。
+[达摩不倒翁](https://en.wikipedia.org/wiki/Daruma_doll)是与坚韧和坚持相关的日本传统不倒翁。你的长任务也一样：挨一记 `429`，再爬起来就是了。
 
 ## 许可
 
