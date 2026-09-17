@@ -59,6 +59,31 @@ in-repo retries render. The notices are **live-only** — out-of-repo session
 events are not yet persisted by the harness, so rows do not survive a page
 reload or a resumed session.
 
+## Usage screenshots / 使用截图
+
+These are captures from a live DSH Web session running the mock-a → mock-b
+failover flow.
+
+### English
+
+![English failover notice in the conversation](./assets/en-failover-row.jpg)
+
+*Failover notice shown inline after mock-a returns `RATE_LIMIT`.*
+
+![English backup channel panel](./assets/en-backup-panel.jpg)
+
+*Backup channel picker with the current and candidate models.*
+
+### 中文
+
+![中文会话中的故障转移提示](./assets/zh-failover-row.jpg)
+
+*mock-a 返回 `RATE_LIMIT` 后，中文界面显示故障转移提示。*
+
+![中文备用渠道面板](./assets/zh-backup-panel.jpg)
+
+*备用渠道面板展示当前备用模型和候选模型。*
+
 ## Audit log
 
 Every failover / give-up / boot decision is appended to
