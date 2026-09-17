@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import {
+  ReasoningEffortId,
+  type LlmCallConfig,
+  type LlmResolvedModelInfo,
+  type ResolvedRetryPolicy,
+} from '@deepseek-ai/dsh-llm'
 import {
   channelIdOf,
   channelIdOfConfig,
+  isRetryExhausted,
   toFailoverConfig,
   toFailureCode,
   toFailureSignal,
@@ -62,6 +68,52 @@ describe('mapping', () => {
       channel: 'mt::deepseek-v4-pro',
       occurredAtMs: 1234,
       message: 'too fast',
+    })
+  })
+
+  it('marks the signal only when a retry budget was already spent', () => {
+    const channel = channelId('mt::glm-5.3')
+    // Absent, not `false`: a host with no retry owner keeps the old signal shape.
+    expect('retryExhausted' in toFailureSignal({ code: 'RATE_LIMIT', message: 'slow down' }, channel, 1))
+      .toBe(false)
+    expect(toFailureSignal({ code: 'RATE_LIMIT', message: 'slow down' }, channel, 1, true))
+      .toMatchObject({ retryExhausted: true })
+  })
+
+  describe('isRetryExhausted', () => {
+    const normal: ResolvedRetryPolicy = {
+      mode: 'normal',
+      maxRetries: 5,
+      retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+      initialDelayMs: 500,
+      maxDelayMs: 10_000,
+      jitterRatio: 0.1,
+    }
+    const always: ResolvedRetryPolicy = {
+      mode: 'always',
+      initialDelayMs: 500,
+      maxDelayMs: 10_000,
+      jitterRatio: 0.1,
+    }
+
+    it('reads arrival with a retryable code as a spent budget', () => {
+      // The 2026-09-17 production shape: five same-channel RATE_LIMIT retries,
+      // and only the last one is ever handed to daruma.
+      expect(isRetryExhausted('RATE_LIMIT', normal)).toBe(true)
+    })
+
+    it('does not read a code the policy would never retry', () => {
+      expect(isRetryExhausted('QUOTA', normal)).toBe(false)
+    })
+
+    it('does not read `always` mode as exhaustion', () => {
+      // `always` mode consults its downstream listeners before deciding to
+      // retry, so arrival there carries no information about the budget.
+      expect(isRetryExhausted('RATE_LIMIT', always)).toBe(false)
+    })
+
+    it('does not read a failure no retry policy owned', () => {
+      expect(isRetryExhausted('RATE_LIMIT', undefined)).toBe(false)
     })
   })
 

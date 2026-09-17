@@ -12,11 +12,11 @@
  */
 
 import { afterAll, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type LlmCallConfig, type LlmResolvedModelInfo, type ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from './index.ts'
 
@@ -53,7 +53,12 @@ function modelInfo(efforts: readonly string[] | undefined): LlmResolvedModelInfo
 
 const dirs: string[] = []
 
-function harness(options: { readonly efforts?: readonly string[] | undefined; readonly throws?: boolean }): Harness {
+function harness(options: {
+  readonly efforts?: readonly string[] | undefined
+  readonly throws?: boolean
+  /** Override the budget of 1, so counted-failure paths can be exercised. */
+  readonly failureBudget?: number
+}): Harness {
   const logs: string[] = []
   const listeners = new Map<string, Listener>()
   const dir = mkdtempSync(join(tmpdir(), 'daruma-effort-'))
@@ -81,7 +86,7 @@ function harness(options: { readonly efforts?: readonly string[] | undefined; re
 
   apply(ctx, {
     channels: [{ provider: 'mt', model: 'glm-5.2' }],
-    failureBudget: 1,
+    failureBudget: options.failureBudget ?? 1,
     cooldownMs: 30_000,
     giveUpBudget: 8,
     stateFile: join(dir, 'channel-health.json'),
@@ -176,5 +181,92 @@ describe('dsh-daruma failover swap', () => {
 
     expect(swapped).toEqual({ ...noEffort, provider: 'mt', model: 'glm-5.2' })
     expect(h.logs.some((line) => line.includes('reasoning effort'))).toBe(false)
+  })
+})
+
+/**
+ * The 2026-09-17 production failure these cover: one turn burned five
+ * same-channel retries on `RATE_LIMIT` (10:49:30–10:49:42), the failure then
+ * reached daruma exactly once, and `failureBudget: 3` kept the channel routable
+ * — so a saturated channel never switched while a terminal code switched on its
+ * first failure.
+ */
+describe('dsh-daruma retry-exhaustion escalation', () => {
+  const SPENT: ResolvedRetryPolicy = {
+    mode: 'normal',
+    maxRetries: 5,
+    retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+    initialDelayMs: 500,
+    maxDelayMs: 10_000,
+    jitterRatio: 0.1,
+  }
+  const ALWAYS: ResolvedRetryPolicy = {
+    mode: 'always',
+    initialDelayMs: 500,
+    maxDelayMs: 10_000,
+    jitterRatio: 0.1,
+  }
+
+  /** One failed request, as the host hands it to the waterfall. */
+  function failure(agent: Agent, retryPolicy?: ResolvedRetryPolicy): unknown {
+    return {
+      agent,
+      failure: { code: 'RATE_LIMIT', status: 429, message: 'slow down' },
+      turn: 1,
+      step: 1,
+      provider: BASE.provider,
+      ...(retryPolicy === undefined ? {} : { retryPolicy }),
+    }
+  }
+
+  it('fails over on the first failure once the retry budget is spent', async () => {
+    const h = harness({ failureBudget: 3 })
+    const agent = agentStub()
+    await h.fire('agent/request', { agent }, async () => ({ ...BASE }))
+
+    const action = await h.fire('agent/request-error', failure(agent, SPENT), async () => undefined)
+    expect(action).toEqual({ kind: 'retry' })
+
+    const swapped = (await h.fire('agent/request', { agent }, async () => ({ ...BASE }))) as LlmCallConfig
+    expect(swapped).toMatchObject({ provider: 'mt', model: 'glm-5.2' })
+
+    // A post-hoc auditor must be able to tell an escalated switch from a counted
+    // one, so the decision carries the escalation into the JSONL log.
+    const lines = readFileSync(join(h.dir, 'failover-log.jsonl'), 'utf8').trim().split('\n')
+    const failover = lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((record) => record.kind === 'failover')
+    expect(failover).toMatchObject({
+      from: 'deepseek-official::deepseek-v4-flash',
+      to: 'mt::glm-5.2',
+      reason: 'RATE_LIMIT',
+      retryExhausted: true,
+      failoverCount: 1,
+    })
+  })
+
+  it('still needs three failing turns when no retry budget was spent', async () => {
+    const h = harness({ failureBudget: 3 })
+    const agent = agentStub()
+    await h.fire('agent/request', { agent }, async () => ({ ...BASE }))
+
+    // No retryPolicy in the payload: nothing retried it, so it is one unit each.
+    expect(await h.fire('agent/request-error', failure(agent), async () => undefined)).toBeUndefined()
+    expect(await h.fire('agent/request-error', failure(agent), async () => undefined)).toBeUndefined()
+    expect(await h.fire('agent/request-error', failure(agent), async () => undefined))
+      .toEqual({ kind: 'retry' })
+  })
+
+  it('does not read `always` mode as a spent budget', async () => {
+    const h = harness({ failureBudget: 3 })
+    const agent = agentStub()
+    await h.fire('agent/request', { agent }, async () => ({ ...BASE }))
+
+    expect(await h.fire('agent/request-error', failure(agent, ALWAYS), async () => undefined))
+      .toBeUndefined()
+    expect(await h.fire('agent/request-error', failure(agent, ALWAYS), async () => undefined))
+      .toBeUndefined()
+    expect(await h.fire('agent/request-error', failure(agent, ALWAYS), async () => undefined))
+      .toEqual({ kind: 'retry' })
   })
 })

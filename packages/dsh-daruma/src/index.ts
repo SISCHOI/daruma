@@ -12,6 +12,10 @@
  * owns same-channel retry and delegates here (via `next()`) when it gives up,
  * so daruma only escalates after retry has exhausted its budget.
  *
+ * That position is also read as evidence: a failure retry already spent its
+ * budget on arrives as `retryExhausted` and opens the circuit on the first one,
+ * instead of waiting for `failureBudget` failing turns (see `isRetryExhausted`).
+ *
  * Additionally mounts the `/dsh-daruma` RPC channel (status, candidate
  * discovery, backup selection) for the web client UI, and appends a durable
  * `daruma/failover` session event on every channel switch.
@@ -20,7 +24,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import { channelIdOf, channelIdOfConfig, toFailoverConfig, toFailureSignal, type EffortDisposition } from './mapping.ts'
+import {
+  channelIdOf,
+  channelIdOfConfig,
+  isRetryExhausted,
+  toFailoverConfig,
+  toFailureSignal,
+  type EffortDisposition,
+} from './mapping.ts'
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
@@ -130,7 +141,15 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   ctx.on('agent/request-error', async (payload, next): Promise<RequestErrorAction> => {
     failedSinceRequest.add(payload.agent.id)
     const channel = currentChannel.get(payload.agent.id) ?? channelIdOf(payload.provider, '')
-    const signal = toFailureSignal(payload.failure, channel, Date.now())
+    // Reaching this listener already means the in-box retry declined the code;
+    // for a code its own policy calls retryable, that is a spent budget rather
+    // than a single attempt.
+    const signal = toFailureSignal(
+      payload.failure,
+      channel,
+      Date.now(),
+      isRetryExhausted(payload.failure.code, payload.retryPolicy),
+    )
     const plan = engine.onFailure(signal, backupChannel(), payload.agent.id)
 
     if (plan.verdict.kind === 'FAILOVER') {
@@ -156,6 +175,8 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         to: plan.verdict.target.id,
         reason: signal.code,
         status: payload.failure.status,
+        // Audit trail for *why now*: an escalated switch is not a counted one.
+        ...(signal.retryExhausted === true ? { retryExhausted: true } : {}),
         turn: payload.turn,
         step: payload.step,
         failoverCount: plan.failoverCount,
