@@ -17,9 +17,17 @@
  *
  * Usage:
  *   node scripts/e2e-failover.mjs [--dsh <command|path-to-bin.js>] [--keep]
+ *                                 [--failure-budget <n>] [--max-retries <n>]
  * Env:
- *   DSH_BIN        default for --dsh
- *   E2E_MOCK_PORT  mock LLM port (default 3099)
+ *   DSH_BIN             default for --dsh
+ *   E2E_MOCK_PORT       mock LLM port (default 3099)
+ *   E2E_FAILURE_BUDGET  default for --failure-budget (default 1)
+ *   E2E_MAX_RETRIES     default for --max-retries (default 0)
+ *
+ * `--failure-budget 3` is the interesting run: the old counting policy needs
+ * three failing *turns*, so a switch on the very first one can only come from
+ * the retry-exhaustion escalation. `--max-retries 5` reproduces the production
+ * shape, where the in-box retry burns its whole budget before delegating.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -33,11 +41,19 @@ const repoRoot = resolve(here, '..')
 const isWindows = process.platform === 'win32'
 
 function parseArgs(argv) {
-  const options = { dsh: process.env.DSH_BIN ?? 'dsh', keep: false, mockPort: Number(process.env.E2E_MOCK_PORT ?? 3099) }
+  const options = {
+    dsh: process.env.DSH_BIN ?? 'dsh',
+    keep: false,
+    mockPort: Number(process.env.E2E_MOCK_PORT ?? 3099),
+    failureBudget: Number(process.env.E2E_FAILURE_BUDGET ?? 1),
+    maxRetries: Number(process.env.E2E_MAX_RETRIES ?? 0),
+  }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--dsh') options.dsh = argv[++i]
     else if (arg === '--mock-port') options.mockPort = Number(argv[++i])
+    else if (arg === '--failure-budget') options.failureBudget = Number(argv[++i])
+    else if (arg === '--max-retries') options.maxRetries = Number(argv[++i])
     else if (arg === '--keep') options.keep = true
   }
   return options
@@ -148,7 +164,7 @@ try {
       baseURL: http://127.0.0.1:${mockPort}/v1
       retryPolicy:
         mode: normal
-        maxRetries: 0
+        maxRetries: ${options.maxRetries}
       models:
         - { id: mock-a, contextWindow: 65536 }
         - { id: mock-b, contextWindow: 65536 }
@@ -166,7 +182,7 @@ agent-default-model:
     channels:
       - { provider: mock, model: mock-a }
       - { provider: mock, model: mock-b }
-    failureBudget: 1
+    failureBudget: ${options.failureBudget}
     stateFile: ${stateFile.replaceAll('\\', '/')}
     logFile: ${logFile.replaceAll('\\', '/')}
 `)
@@ -186,6 +202,7 @@ agent-default-model:
 
   const task = 'Reply with exactly: OK'
   const args = [...prefixArgs, '--profile', profile, task]
+  console.log(`config: failureBudget=${options.failureBudget} maxRetries=${options.maxRetries}`)
   console.log(`running: ${command} ${args.join(' ')} (DSH_HOME=${dshHome})`)
   // Windows resolves `dsh` to `dsh.cmd`, which modern Node only launches
   // through a shell (CVE-2024-27980), so quote the whole line there.
@@ -215,6 +232,15 @@ agent-default-model:
     'failover log records mock-a -> mock-b (RATE_LIMIT)',
     failover !== undefined && failover.from === 'mock::mock-a' && failover.to === 'mock::mock-b' && failover.reason === 'RATE_LIMIT',
     failover === undefined ? '(no failover line)' : JSON.stringify(failover),
+  )
+  // The escalation itself: a retryable code arriving from a normal-mode policy
+  // is a spent retry budget, so the circuit opens on this one failure even when
+  // `failureBudget` is higher. Without the flag, the run above would need
+  // `failureBudget` failing turns and this line would not exist.
+  check(
+    'failover was escalated by a spent retry budget',
+    failover !== undefined && failover.retryExhausted === true,
+    failover === undefined ? '(no failover line)' : `retryExhausted=${String(failover.retryExhausted)}`,
   )
 
   const health = existsSync(stateFile) ? safeJson(stateFile) : {}

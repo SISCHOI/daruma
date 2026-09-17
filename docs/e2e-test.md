@@ -22,8 +22,31 @@ profile, starts the mock LLM server on `:3099`, runs one task and asserts:
    and `mock::mock-b` as `HEALTHY`.
 
 Useful flags: `--dsh <command|path-to-bin.js>` (test a specific host build),
-`--mock-port <port>`, `--keep` (keep the temp home for inspection). The
-production `~/.dsh` is never touched.
+`--mock-port <port>`, `--failure-budget <n>` (default 1), `--max-retries <n>`
+(default 0), `--keep` (keep the temp home for inspection). The production
+`~/.dsh` is never touched.
+
+> On Windows, pass the CLI's JS entry rather than a `dsh.ps1` shim: the script
+> launches the host through a shell, and `cmd` cannot run a PowerShell script —
+> the symptom is a silent `exit 0` with no output and no boot line.
+> `--dsh C:\Users\<you>\nodejs\node_modules\@deepseek-ai\dsh\lib\bin.js`.
+
+### Retry-exhaustion escalation
+
+`--failure-budget 3` is the run that distinguishes the escalation from ordinary
+counting. The in-box `dsh-llm-retry` spends the channel's retry budget before
+daruma is consulted, so one failing turn is one failure to daruma; without the
+escalation a `failureBudget` of 3 would need three failing turns and the run
+would produce no failover line at all. `--max-retries 5` additionally reproduces
+the production shape (the whole retry budget burned before delegation):
+
+```bash
+node scripts/e2e-failover.mjs --dsh <bin.js> --failure-budget 3 --max-retries 5
+```
+
+Expect: `mock completion from mock-b`, exit 0, a failover line whose
+`reason` is `RATE_LIMIT` **and** `retryExhausted` is `true`, and
+`mock::mock-a` persisted as `COOLDOWN` with `consecutiveFailures: 1`.
 
 > **Running inside WSL?** WSL appends the Windows PATH, so a bare `dsh` can
 > resolve to the **Windows** install under `/mnt/c/…`; Linux node then fails to
