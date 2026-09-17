@@ -42,11 +42,28 @@ export interface DecideInput {
   readonly preferred?: Channel
 }
 
+/**
+ * Whether this failure opens the circuit on its own, instead of spending budget.
+ *
+ * Two kinds do:
+ * - terminal codes (`QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`):
+ *   a same-channel retry can never repair them;
+ * - a failure the host already retried to exhaustion (`retryExhausted`): retry
+ *   spent its entire budget on this channel and the channel still failed, so the
+ *   signal already carries a retry sequence rather than one attempt.
+ *
+ * `tripOnRetryExhausted: false` restores counting for the second kind.
+ */
+function tripsCircuit(signal: FailureSignal, config: RecoveryPolicyConfig): boolean {
+  if (isTerminalCode(signal.code)) return true
+  return config.tripOnRetryExhausted !== false && signal.retryExhausted === true
+}
+
 export function decide(input: DecideInput): RecoveryPlan {
   const { signal, healths, failoverCount, config, nowMs } = input
   const current = healths.get(signal.channel) ?? freshHealth(signal.channel, nowMs)
 
-  const healthAfter = isTerminalCode(signal.code)
+  const healthAfter = tripsCircuit(signal, config)
     ? trip(current, nowMs, config.cooldownMs)
     : recordFailure(current, nowMs, config.failureBudget, config.cooldownMs)
 
