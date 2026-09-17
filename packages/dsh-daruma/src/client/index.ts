@@ -7,7 +7,8 @@
 
 import { createElement as h } from 'react'
 import { en, zh } from './locales.ts'
-import { createApi, type Rpc, type RpcResult } from './api.ts'
+import { createApi } from './api.ts'
+import { createAdaptiveRpc } from './adaptive-rpc.ts'
 import { StatusDock } from './StatusDock.tsx'
 import {
   createFailoverNoticeDefinition,
@@ -112,8 +113,7 @@ export function apply(ctx: ClientContext): void {
     console.warn('[dsh-daruma] web transport unavailable — client UI disabled')
     return
   }
-  const rpc: Rpc = (endpoint, payload) =>
-    connection.rpc.call('/dsh-daruma', endpoint, payload ?? {}) as Promise<RpcResult>
+  const rpc = createAdaptiveRpc(connection)
   const api = createApi(rpc)
 
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({

@@ -8,11 +8,24 @@ import type { LlmRuntime, LlmModelInfo } from '@deepseek-ai/dsh-llm'
 import type { SettingsProvider, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
+import { isBrokenRpcHandleError, mountHttpFallback } from './http-transport.ts'
 import type { StatusService } from './status.ts'
 
 export type RpcResult =
   | { ok: true; value: unknown }
-  | { ok: false; error: { code: string; message: string } }
+  | {
+    ok: false
+    /**
+     * The host's response envelope validates failures against
+     * `dsh-client-connection`'s `rpcErrorSchema`, which requires a `details`
+     * record; the browser's `parseConnectionResponse` throws
+     * `connection: invalid server-response failure` without one — on **both**
+     * transports (`rpc.handle` and the `/api` fallback) since they share that
+     * parser. Optional in the type so a foreign dispatch cannot be forced to
+     * invent one, but every failure daruma owns sets it.
+     */
+    error: { code: string; message: string; details?: Record<string, unknown> }
+  }
 
 export interface RpcDeps {
   readonly engine: RecoveryEngine
@@ -154,7 +167,7 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
       const code = message.startsWith('bad-request:') ? 'bad-request' : 'internal'
       return {
         ok: false,
-        error: { code, message: message.replace(/^bad-request: /u, '') },
+        error: { code, message: message.replace(/^bad-request: /u, ''), details: {} },
       }
     }
   }
@@ -163,10 +176,13 @@ export function mountRpc(ctx: Context, deps: RpcDeps): void {
     const dispose = connection.rpc.handle('/dsh-daruma', dispatch, { authority: 'loopback' })
     ctx.effect(() => dispose, 'dsh-daruma: /dsh-daruma rpc channel')
   } catch (error) {
-    // Known host regression: 0.1.5-rc.1/rc.2 dropped `webServer` from the
+    // Known host regression: 0.1.5-alpha.1 … rc.2 dropped `webServer` from the
     // connection plugin's own inject list while `rpc.handle()` still registers
     // its route through the service context, so the call throws for every
-    // caller. Fail loudly instead of leaving the panel silently empty.
+    // caller. On exactly that failure, mount the panel through the shared
+    // `/api` Fetch carrier instead (see src/http-transport.ts). Anything else
+    // still fails loudly instead of leaving the panel silently empty.
+    if (isBrokenRpcHandleError(error) && mountHttpFallback(ctx, connection, dispatch)) return
     ctx.logger.warn(
       `dsh-daruma: /dsh-daruma rpc channel could not be registered (${messageOf(error)}); `
       + 'the status dock and backup picker stay disabled on this host generation',
