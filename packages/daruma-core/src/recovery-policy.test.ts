@@ -164,3 +164,86 @@ describe('recovery policy decide()', () => {
     expect(plan.healthAfter.channel).toBe('never-seen')
   })
 })
+
+/**
+ * The production failure these cover (2026-09-17): five consecutive `RATE_LIMIT`
+ * failures on one channel inside a single step never switched channels.
+ *
+ * Root cause: the host's own retry plugin spends that channel's retry budget
+ * (default 5 attempts) *before* daruma is consulted, and daruma counted the one
+ * failure it finally saw as a single attempt. `failureBudget: 3` therefore meant
+ * three failing *turns*, while a terminal code switched on the first failure —
+ * backwards, since exhaustion is stronger evidence than one attempt.
+ */
+describe('retry-exhaustion escalation', () => {
+  const exhausted = (code: FailureSignal['code'] = 'RATE_LIMIT'): FailureSignal => ({
+    ...signal(code),
+    retryExhausted: true,
+  })
+
+  it('trips on the first failure that already spent the retry budget', () => {
+    const plan = decide({
+      signal: exhausted(),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    expect(plan.healthAfter.state).toBe('COOLDOWN')
+    // Counted honestly: one signal, one recorded failure, circuit open.
+    expect(plan.healthAfter.consecutiveFailures).toBe(1)
+    expect(plan.failoverCount).toBe(1)
+  })
+
+  it('counts a failure no retry owner ever retried', () => {
+    const plan = decide({
+      signal: signal('RATE_LIMIT'),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+    })
+    expect(plan.verdict.kind).toBe('RETRY_NOW')
+    expect(plan.healthAfter.state).toBe('HEALTHY')
+    expect(plan.healthAfter.consecutiveFailures).toBe(1)
+  })
+
+  it('does not escalate when the switch back to counting is configured', () => {
+    // `tripOnRetryExhausted: false` is the documented escape hatch to the old
+    // behavior, for a host whose retry owner cannot be trusted to sit upstream.
+    const plan = decide({
+      signal: exhausted(),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config: { ...config, tripOnRetryExhausted: false },
+      nowMs: 1000,
+    })
+    expect(plan.verdict.kind).toBe('RETRY_NOW')
+    expect(plan.healthAfter.state).toBe('HEALTHY')
+    expect(plan.healthAfter.consecutiveFailures).toBe(1)
+  })
+
+  it('still opens the circuit for a terminal code whatever the flag says', () => {
+    const plan = decide({
+      signal: { ...signal('QUOTA'), retryExhausted: false },
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config: { ...config, tripOnRetryExhausted: false },
+      nowMs: 1000,
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    expect(plan.healthAfter.state).toBe('COOLDOWN')
+  })
+
+  it('stays deterministic for an exhausted signal', () => {
+    const mk = () => ({
+      signal: exhausted(),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+    })
+    expect(decide(mk())).toEqual(decide(mk()))
+  })
+})

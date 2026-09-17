@@ -6,7 +6,7 @@
  * (treated as retryable).
  */
 
-import type { LlmCallConfig, LlmFailure, LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import type { LlmCallConfig, LlmFailure, LlmResolvedModelInfo, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import {
   channelId,
   type Channel,
@@ -44,6 +44,7 @@ export function toFailureSignal(
   failure: LlmFailure,
   channel: ChannelId,
   occurredAtMs: number,
+  retryExhausted = false,
 ): FailureSignal {
   return {
     code: toFailureCode(failure.code),
@@ -51,7 +52,36 @@ export function toFailureSignal(
     channel,
     occurredAtMs,
     message: failure.message,
+    // Absent unless it happened, so a signal from a host without a retry owner
+    // keeps the shape it always had.
+    ...(retryExhausted ? { retryExhausted: true } : {}),
   }
+}
+
+/**
+ * Whether the host's same-channel retry budget was already spent on the failure
+ * daruma is being asked to escalate.
+ *
+ * daruma sits downstream of the in-box `dsh-llm-retry` on the
+ * `agent/request-error` waterfall (`dsh-llm-retry/lib/index.js`): that plugin
+ * answers a retryable failure with a retry of the same channel and only calls
+ * through when its budget runs out. Being handed the failure at all therefore
+ * *is* the exhaustion signal — for a code its own policy lists as retryable.
+ *
+ * Two cases must not be read that way:
+ * - no policy at all: no adapter route owned the request, so nothing retried it;
+ * - `always` mode: that mode consults its downstream listeners *before* deciding
+ *   to retry, so arrival carries no information about the budget there.
+ *
+ * @param code - the failure code, as DSH reports it (not yet mapped).
+ * @param policy - the failed route's resolved retry policy, per the host payload.
+ */
+export function isRetryExhausted(
+  code: string,
+  policy: ResolvedRetryPolicy | undefined,
+): boolean {
+  if (policy === undefined || policy.mode === 'always') return false
+  return policy.retryableCodes.includes(code)
 }
 
 /**

@@ -17,6 +17,7 @@ export interface PluginConfig {
   readonly failureBudget?: number
   readonly cooldownMs?: number
   readonly giveUpBudget?: number
+  readonly tripOnRetryExhausted?: boolean
   readonly stateFile?: string
   readonly logFile?: string
 }
@@ -78,6 +79,9 @@ export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
   const failureBudget = positiveInteger(raw.failureBudget, 3, 'failureBudget')
   const cooldownMs = positiveInteger(raw.cooldownMs, 30_000, 'cooldownMs')
   const giveUpBudget = positiveInteger(raw.giveUpBudget, 8, 'giveUpBudget')
+  if (raw.tripOnRetryExhausted !== undefined && typeof raw.tripOnRetryExhausted !== 'boolean') {
+    throw new Error('invalid tripOnRetryExhausted: expected a boolean')
+  }
   if (raw.stateFile !== undefined && (typeof raw.stateFile !== 'string' || raw.stateFile.trim() === '')) {
     throw new Error('invalid stateFile: expected a non-empty string')
   }
@@ -91,6 +95,9 @@ export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
     failureBudget,
     cooldownMs,
     giveUpBudget,
+    // Default on: see `RecoveryPolicyConfig.tripOnRetryExhausted`. Only an
+    // explicit `false` restores counting a spent retry budget as one failure.
+    tripOnRetryExhausted: raw.tripOnRetryExhausted ?? true,
     stateFile,
     logFile: raw.logFile || defaultLogFile(stateFile),
   }

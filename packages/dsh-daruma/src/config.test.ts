@@ -31,6 +31,13 @@ describe('resolveConfig', () => {
     expect(config.logFile).toBe(config.stateFile.replace('channel-health.json', 'failover-log.jsonl'))
   })
 
+  it('escalates an exhausted retry by default, and can be switched off', () => {
+    expect(resolveConfig({}).tripOnRetryExhausted).toBe(true)
+    expect(resolveConfig({ tripOnRetryExhausted: false }).tripOnRetryExhausted).toBe(false)
+    expect(() => resolveConfig({ tripOnRetryExhausted: 'yes' as never }))
+      .toThrow(/tripOnRetryExhausted/)
+  })
+
   it('derives channel ids from provider/model pairs', () => {
     const config = resolveConfig({
       channels: [

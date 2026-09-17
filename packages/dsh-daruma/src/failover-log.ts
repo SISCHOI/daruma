@@ -31,6 +31,12 @@ export type FailoverLogRecord =
     readonly to: string
     /** Stable failure code, e.g. `RATE_LIMIT`. */
     readonly reason: string
+    /**
+     * Present when the switch was escalated by an already-exhausted same-channel
+     * retry budget rather than by the failure counter. Absent means the ordinary
+     * path, so older lines stay readable.
+     */
+    readonly retryExhausted?: boolean
     /** HTTP status of the failed request, when available. */
     readonly status?: number
     /** Turn / step of the failed request. */
