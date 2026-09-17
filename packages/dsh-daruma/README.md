@@ -61,8 +61,8 @@ reload or a resumed session.
 
 ## Usage screenshots / 使用截图
 
-These are captures from a live DSH Web session running the mock-a → mock-b
-failover flow.
+Captured from live DSH Web sessions: the composer and the channel picker on a
+real `mt` provider, the failover row from the `mock-a → mock-b` demo flow.
 
 The images are linked by absolute URL on purpose: npm's web UI does not resolve
 relative README image paths, so a `./assets/…` link renders broken on the
@@ -71,23 +71,46 @@ package page (it still works on GitHub). The copies shipped in the tarball
 
 ### English
 
-![English failover notice in the conversation](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-failover-row.jpg)
+**The composer.** The daruma control sits at the right end of the tool row, next
+to the model selector, and shows the armed backup channel (`Backup:
+mt/glm-5.3`):
 
-*Failover notice shown inline after mock-a returns `RATE_LIMIT`.*
+![Composer with the daruma backup control](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-composer.jpg)
 
-![English backup channel panel](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-backup-panel.jpg)
+**Picking a backup channel.** Clicking the control opens the picker: the current
+backup, a provider box, and the candidates discovered from that provider's
+adapter:
 
-*Backup channel picker with the current and candidate models.*
+![Backup-channel picker](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-backup-menu.jpg)
+
+**The model selector** the control sits next to:
+
+![Model selector](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-model-menu.jpg)
+
+**A failover notice** rendered inline in the conversation, right where the switch
+happened:
+
+![Failover notice in the conversation](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-failover-row.jpg)
 
 ### 中文
 
-![中文会话中的故障转移提示](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-failover-row.jpg)
+**输入框。** daruma 控件在工具行最右端、模型选择器旁边，显示当前已设置的备用渠道
+（`备用: mt/glm-5.3`）：
 
-*mock-a 返回 `RATE_LIMIT` 后，中文界面显示故障转移提示。*
+![带 daruma 备用控件的输入框](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-composer.jpg)
 
-![中文备用渠道面板](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-backup-panel.jpg)
+**选择备用渠道。** 点开控件即出现选择面板：当前备用、provider 输入框，以及从该
+provider 适配器发现的候选模型：
 
-*备用渠道面板展示当前备用模型和候选模型。*
+![备用渠道选择面板](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-backup-menu.jpg)
+
+**模型选择器**（控件就在它旁边）：
+
+![模型选择器](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-model-menu.jpg)
+
+**切换提示**，直接渲染在会话流里发生切换的位置：
+
+![会话中的故障转移提示](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-failover-row.jpg)
 
 ## Audit log
 

@@ -10,6 +10,17 @@
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) is a great place to run long agent tasks — until a third-party API subscription hiccups. Rate limits (`429`), server errors (`500`), network jitter, provider-side model stalls, moderation gatekeeping: any of them kills a long-running task mid-flight. **Daruma catches the failure and fails over to another channel**, so the session keeps going without you.
 
+## Screenshots
+
+The daruma control lives at the right end of the composer tool row, next to the
+model selector; clicking it opens the backup-channel picker.
+
+![The composer: the daruma backup control sits next to the model selector](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-composer.jpg)
+
+![The backup-channel picker: current backup, provider box, candidate models](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-backup-menu.jpg)
+
+![A failover notice rendered inline in the conversation](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/en-failover-row.jpg)
+
 ## What it does
 
 - **Automatic failover.** When the current model/channel trips after repeated failures (or hits a terminal error like `QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`), daruma switches the *next* request to another channel in your configured chain. The in-flight generation continues on the new channel — no lost sessions.
@@ -180,6 +191,16 @@ MIT © 2026 SISCHOI
 # daruma — DeepSeek Harness 的自动故障转移与备用渠道插件
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）跑长任务很顺手 —— 直到第三方 API 订阅抽风。限流（`429`）、服务端错误（`500`）、网络抖动、供应商侧模型卡死、内容审核拦截：任何一个都能把长任务拦腰打断。**daruma 接住失败并切换到其他渠道**，会话无需你介入就能继续。
+
+## 截图
+
+daruma 控件在输入框工具行最右端、模型选择器旁边；点开它即出现备用渠道选择面板。
+
+![输入框：daruma 备用控件就在模型选择器旁边](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-composer.jpg)
+
+![备用渠道选择面板：当前备用、provider 输入框、候选模型](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-backup-menu.jpg)
+
+![会话中的故障转移提示](https://raw.githubusercontent.com/SISCHOI/daruma/main/packages/dsh-daruma/assets/zh-failover-row.jpg)
 
 ## 功能
 
