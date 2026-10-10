@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidBackup, fileBackupStorage, settingsBackupStorage, type LegacySettingsScope, type LegacySettingsService } from './status.ts'
+import { settingsBackupStorage, type LegacySettingsScope, type LegacySettingsService } from './status.ts'
 
 const mockScope = (value: unknown): LegacySettingsScope => ({
   get: () => ({ backup: value }),
