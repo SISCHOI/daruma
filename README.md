@@ -172,7 +172,7 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | works | works |
 | `0.1.2-alpha.2` … `0.1.3-*` | works | works |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | works | **blocked upstream** — `connection.rpc.handle()` throws `cannot get property "webServer" without inject` on those hosts for every third-party plugin; daruma logs it loudly and keeps failing over |
-| `0.2.0-rc.2`, `0.2.1-alpha.2` | works (backup channel included) | not yet verified in a browser |
+| `0.2.0-rc.2`, `0.2.1-alpha.2` | works (backup channel included) | works over the `/api/dsh-daruma` fallback (RPC probed; browser rendering not yet checked) |
 
 On `0.2.x` the backup channel picked in the web panel is stored in
 `backup-channel.json` next to `channel-health.json`; `0.1.x` hosts keep it in
@@ -349,7 +349,7 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | 可用 | 可用 |
 | `0.1.2-alpha.2` … `0.1.3-*` | 可用 | 可用 |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | 可用 | **上游阻塞** —— 这些宿主的 `connection.rpc.handle()` 对任何第三方插件都抛 `cannot get property "webServer" without inject`；daruma 会明确报警并继续保证故障转移 |
-| `0.2.0-rc.2`、`0.2.1-alpha.2` | 可用（含备用通道） | 尚未在浏览器中验证 |
+| `0.2.0-rc.2`、`0.2.1-alpha.2` | 可用（含备用通道） | 经 `/api/dsh-daruma` 兜底通道可用（RPC 已实测；浏览器渲染未检查） |
 
 在 `0.2.x` 上，Web 面板选的备用通道存在 `channel-health.json` 旁边的
 `backup-channel.json`；`0.1.x` 宿主仍存在 `daruma` 设置命名空间里。
