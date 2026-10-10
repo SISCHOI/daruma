@@ -20,11 +20,14 @@ export interface PluginConfig {
   readonly tripOnRetryExhausted?: boolean
   readonly stateFile?: string
   readonly logFile?: string
+  /** Backup-channel file, used on hosts without namespaced settings (DSH 0.2+). */
+  readonly backupFile?: string
 }
 
 export interface ResolvedConfig extends RecoveryPolicyConfig {
   readonly stateFile: string
   readonly logFile: string
+  readonly backupFile: string
 }
 
 /**
@@ -44,6 +47,10 @@ export function defaultStateFile(env: NodeJS.ProcessEnv = process.env): string {
 
 export function defaultLogFile(stateFile: string): string {
   return join(dirname(stateFile), 'failover-log.jsonl')
+}
+
+export function defaultBackupFile(stateFile: string): string {
+  return join(dirname(stateFile), 'backup-channel.json')
 }
 
 export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
@@ -88,6 +95,9 @@ export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
   if (raw.logFile !== undefined && (typeof raw.logFile !== 'string' || raw.logFile.trim() === '')) {
     throw new Error('invalid logFile: expected a non-empty string')
   }
+  if (raw.backupFile !== undefined && (typeof raw.backupFile !== 'string' || raw.backupFile.trim() === '')) {
+    throw new Error('invalid backupFile: expected a non-empty string')
+  }
 
   const stateFile = raw.stateFile || defaultStateFile()
   return {
@@ -100,5 +110,6 @@ export function resolveConfig(raw: PluginConfig = {}): ResolvedConfig {
     tripOnRetryExhausted: raw.tripOnRetryExhausted ?? true,
     stateFile,
     logFile: raw.logFile || defaultLogFile(stateFile),
+    backupFile: raw.backupFile || defaultBackupFile(stateFile),
   }
 }

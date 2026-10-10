@@ -88,7 +88,8 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const store = new JsonFileChannelHealthStore(config.stateFile)
   const engine = new RecoveryEngine(config, store)
   const failoverLog = new JsonlFailoverLogStore(config.logFile)
-  const status = mountStatus(ctx)
+  const status = mountStatus(ctx.get('settings'), config.backupFile)
+  ctx.logger.info(`dsh-daruma: backup channel stored via ${status.storageKind}`)
   const eventSink = createEventSink(ctx.logger)
 
   // Boot record: one line per plugin start, so audits can align restart
@@ -271,7 +272,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
       currentChannel,
       status,
       getLlm: () => ctx.llm,
-      getSettings: () => ctx.settings,
+      getSettings: () => ctx.get('settings'),
     })
   })
 }

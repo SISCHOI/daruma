@@ -5,7 +5,6 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmRuntime, LlmModelInfo } from '@deepseek-ai/dsh-llm'
-import type { SettingsProvider, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Channel, ChannelId } from 'daruma-core'
 import type { RecoveryEngine } from './engine.ts'
 import { isBrokenRpcHandleError, mountHttpFallback } from './http-transport.ts'
@@ -32,7 +31,8 @@ export interface RpcDeps {
   readonly currentChannel: ReadonlyMap<string, ChannelId>
   readonly status: StatusService
   readonly getLlm: () => LlmRuntime | undefined
-  readonly getSettings: () => SettingsProvider | undefined
+  /** The host's `settings` service, of either generation (see `readPiAiSection`). */
+  readonly getSettings: () => unknown
 }
 
 function messageOf(error: unknown): string {
@@ -62,19 +62,41 @@ interface PiAiSection {
   providers?: Record<string, { models?: readonly { id?: string }[] }>
 }
 
-/** Known provider names: daruma's configured channels plus settings providers. */
+/**
+ * Read the `llm-pi-ai` provider section from whichever settings service the
+ * host ships: 0.1.x answers `get(ns)`; 0.2.x has no `get` and exposes plugin
+ * Config forms through `describe()`, one row per profile entry id.
+ */
+export function readPiAiSection(settings: unknown): PiAiSection | undefined {
+  if (typeof settings !== 'object' || settings === null) return undefined
+  const service = settings as { get?: unknown; describe?: unknown }
+  try {
+    if (typeof service.get === 'function') {
+      return (service.get as (ns: string) => unknown).call(settings, 'llm-pi-ai') as PiAiSection | undefined
+    }
+    if (typeof service.describe === 'function') {
+      const rows = (service.describe as (options: { redactSecrets: boolean }) => unknown)
+        .call(settings, { redactSecrets: true })
+      if (!Array.isArray(rows)) return undefined
+      const row = rows.find((entry) => isRecord(entry) && entry.ns === 'llm-pi-ai') as { value?: unknown } | undefined
+      return isRecord(row?.value) ? (row.value as PiAiSection) : undefined
+    }
+  } catch {
+    // settings unavailable
+  }
+  return undefined
+}
+
+/** Known provider names: configured channels, registered routes, settings providers. */
 function knownProviders(deps: RpcDeps): string[] {
   const names = new Set<string>()
   for (const channel of deps.engine.channels) names.add(channel.provider)
-  const settings = deps.getSettings()
-  if (settings !== undefined) {
-    try {
-      const section = settings.get('llm-pi-ai' as SettingsNamespace) as PiAiSection | undefined
-      for (const provider of Object.keys(section?.providers ?? {})) names.add(provider)
-    } catch {
-      // settings unavailable — configured channels still known
-    }
+  try {
+    for (const info of deps.getLlm()?.listProviders() ?? []) names.add(info.id)
+  } catch {
+    // registry unavailable — configured channels still known
   }
+  for (const provider of Object.keys(readPiAiSection(deps.getSettings())?.providers ?? {})) names.add(provider)
   return [...names]
 }
 
@@ -90,7 +112,7 @@ interface CandidateEntry {
 async function listCandidates(
   llm: LlmRuntime,
   provider: string,
-  settings?: SettingsProvider,
+  settings?: unknown,
 ): Promise<CandidateEntry[]> {
   try {
     const models: LlmModelInfo[] = await llm.listModels(provider)
@@ -98,19 +120,12 @@ async function listCandidates(
   } catch {
     // fall through to the settings model directory
   }
-  if (settings !== undefined) {
-    try {
-      const section = settings.get('llm-pi-ai' as SettingsNamespace) as PiAiSection | undefined
-      const models = section?.providers?.[provider]?.models
-      if (models !== undefined && models.length > 0) {
-        return models
-          .map((model) => model.id)
-          .filter((id): id is string => id !== undefined && id !== '')
-          .map((model) => ({ provider, model }))
-      }
-    } catch {
-      // settings unavailable
-    }
+  const models = readPiAiSection(settings)?.providers?.[provider]?.models
+  if (Array.isArray(models) && models.length > 0) {
+    return models
+      .map((model) => model?.id)
+      .filter((id): id is string => typeof id === 'string' && id !== '')
+      .map((model) => ({ provider, model }))
   }
   return []
 }
