@@ -172,9 +172,15 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | works | works |
 | `0.1.2-alpha.2` … `0.1.3-*` | works | works |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | works | **blocked upstream** — `connection.rpc.handle()` throws `cannot get property "webServer" without inject` on those hosts for every third-party plugin; daruma logs it loudly and keeps failing over |
+| `0.2.0-rc.2`, `0.2.1-alpha.2` | works (backup channel included) | not yet verified in a browser |
+
+On `0.2.x` the backup channel picked in the web panel is stored in
+`backup-channel.json` next to `channel-health.json`; `0.1.x` hosts keep it in
+the `daruma` settings namespace.
 
 Measured with `pnpm run e2e:failover` plus a route probe; details and raw
-evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md).
+evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md),
+[`docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md`](./docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md).
 
 ## Why "daruma"
 
@@ -343,8 +349,12 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | 可用 | 可用 |
 | `0.1.2-alpha.2` … `0.1.3-*` | 可用 | 可用 |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | 可用 | **上游阻塞** —— 这些宿主的 `connection.rpc.handle()` 对任何第三方插件都抛 `cannot get property "webServer" without inject`；daruma 会明确报警并继续保证故障转移 |
+| `0.2.0-rc.2`、`0.2.1-alpha.2` | 可用（含备用通道） | 尚未在浏览器中验证 |
 
-实测方式：`pnpm run e2e:failover` + 路由探针；细节与原始证据见 [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md)。
+在 `0.2.x` 上，Web 面板选的备用通道存在 `channel-health.json` 旁边的
+`backup-channel.json`；`0.1.x` 宿主仍存在 `daruma` 设置命名空间里。
+
+实测方式：`pnpm run e2e:failover` + 路由探针；细节与原始证据见 [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md)、[`docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md`](./docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md)。
 
 ## 为什么叫 "daruma"
 
