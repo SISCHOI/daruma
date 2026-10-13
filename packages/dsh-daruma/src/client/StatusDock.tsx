@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Button, IconCheckOutline16, IconWarningOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DarumaApi, StatusView } from './api.ts'
 import { overallState, type Dot } from './health.ts'
 import { BackupPanel } from './BackupPanel.tsx'
@@ -29,14 +29,35 @@ const iconColor: Record<Dot, string> = {
   ongoing: 'var(--dsw-text-secondary, #888)',
 }
 
-/** Status glyph: a check when healthy, a warning otherwise. */
+/**
+ * Status glyph.
+ *
+ * `StateDot` is the one status primitive whose export name survived the client
+ * rename between host generations — the sized icons did not (`IconCheckOutline16`
+ * exists through `0.1.x`, `IconCheckOutlineMedium` from `0.2`), and importing a
+ * name the host does not export yields `undefined`, which throws inside the slot
+ * render and takes the whole control down with it. The coloured dot is the
+ * fallback for a host that ever drops `StateDot` too.
+ */
 function StatusIcon(props: { state: Dot }): React.JSX.Element {
+  if (typeof StateDot === 'function') {
+    return (
+      <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+        <StateDot state={props.state} />
+      </span>
+    )
+  }
   return (
-    <span style={{ display: 'inline-flex', color: iconColor[props.state], flexShrink: 0 }}>
-      {props.state === 'done'
-        ? <IconCheckOutline16 size={14} />
-        : <IconWarningOutline16 size={14} />}
-    </span>
+    <span
+      style={{
+        display: 'inline-block',
+        flexShrink: 0,
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: iconColor[props.state],
+      }}
+    />
   )
 }
 
