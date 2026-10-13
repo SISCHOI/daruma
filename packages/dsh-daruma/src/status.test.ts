@@ -1,36 +1,34 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
-import { StatusService } from './status.ts'
+import { describe, expect, it } from 'vitest'
+import { settingsBackupStorage, type LegacySettingsScope, type LegacySettingsService } from './status.ts'
 
-function makeScope(value: unknown): SettingsScope<never> {
-  return {
-    get: () => value,
-    watch: () => () => {},
-    update: vi.fn().mockResolvedValue(undefined),
-    replace: vi.fn().mockResolvedValue(undefined),
-  } as unknown as SettingsScope<never>
-}
+const mockScope = (value: unknown): LegacySettingsScope => ({
+  get: () => ({ backup: value }),
+  update: async () => {},
+})
 
-const settings = { mutate: vi.fn().mockResolvedValue(undefined) } as unknown as SettingsProvider
+const mockSettings = (scope: LegacySettingsScope): LegacySettingsService => ({
+  register: () => scope,
+  mutate: async () => {},
+})
 
 describe('StatusService.getBackup', () => {
   it('returns undefined when the section is absent', () => {
-    const service = new StatusService(settings, makeScope({}))
-    expect(service.getBackup()).toBeUndefined()
+    const storage = settingsBackupStorage(mockSettings(mockScope({})))
+    expect(storage.get()).toBeUndefined()
   })
 
   it('returns a valid backup selection', () => {
-    const service = new StatusService(settings, makeScope({ backup: { provider: 'mt', model: 'glm-5.2' } }))
-    expect(service.getBackup()).toEqual({ provider: 'mt', model: 'glm-5.2' })
+    const storage = settingsBackupStorage(mockSettings(mockScope({ provider: 'mt', model: 'glm-5.2' })))
+    expect(storage.get()).toEqual({ provider: 'mt', model: 'glm-5.2' })
   })
 
   it('treats an empty-object backup as unset (settings quirk)', () => {
-    const service = new StatusService(settings, makeScope({ backup: {} }))
-    expect(service.getBackup()).toBeUndefined()
+    const storage = settingsBackupStorage(mockSettings(mockScope({})))
+    expect(storage.get()).toBeUndefined()
   })
 
   it('treats a backup with blank fields as unset', () => {
-    const service = new StatusService(settings, makeScope({ backup: { provider: '', model: 'x' } }))
-    expect(service.getBackup()).toBeUndefined()
+    const storage = settingsBackupStorage(mockSettings(mockScope({ provider: '', model: 'x' })))
+    expect(storage.get()).toBeUndefined()
   })
 })

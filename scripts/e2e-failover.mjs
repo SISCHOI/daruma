@@ -18,6 +18,13 @@
  * Usage:
  *   node scripts/e2e-failover.mjs [--dsh <command|path-to-bin.js>] [--keep]
  *                                 [--failure-budget <n>] [--max-retries <n>]
+ *                                 [--layout settings-file|forms] [--backup]
+ *
+ * The profile layout follows the host: 0.1.x gets `settings.yaml` behind
+ * `dsh-settings-file`, 0.2.x gets plugin rows in `cordis.patch.yml`.
+ *
+ * `--backup` pre-seeds the user's backup channel (`mock-c`, outside the chain)
+ * where that host generation stores it, and expects the failover to land there.
  * Env:
  *   DSH_BIN             default for --dsh
  *   E2E_MOCK_PORT       mock LLM port (default 3099)
@@ -55,6 +62,8 @@ function parseArgs(argv) {
     else if (arg === '--failure-budget') options.failureBudget = Number(argv[++i])
     else if (arg === '--max-retries') options.maxRetries = Number(argv[++i])
     else if (arg === '--keep') options.keep = true
+    else if (arg === '--layout') options.layout = argv[++i]
+    else if (arg === '--backup') options.backup = true
   }
   return options
 }
@@ -135,6 +144,30 @@ function check(label, ok, detail = '') {
 assertUsableHost()
 const { command, prefixArgs } = dshCommand()
 
+/**
+ * Host version: read from the package next to an explicit `bin.js`, otherwise
+ * asked from the CLI. Returns '' when it cannot be determined.
+ */
+function hostVersion() {
+  const target = options.dsh
+  if (target.endsWith('.js') || target.endsWith('.mjs')) {
+    return String(safeJson(join(dirname(resolve(target)), '..', 'package.json')).version ?? '')
+  }
+  const probe = isWindows
+    ? spawnSync(`"${target}" --version`, { encoding: 'utf8', shell: true })
+    : spawnSync(target, ['--version'], { encoding: 'utf8' })
+  return (probe.stdout ?? '').trim().match(/\d+\.\d+\.\d+\S*/u)?.[0] ?? ''
+}
+
+/**
+ * Profile layout the host understands: 0.1.x reads `settings.yaml` through
+ * `dsh-settings-file`; 0.2.x dropped that package and configures every plugin
+ * through rows in `cordis.patch.yml` ("forms"). `--layout` overrides.
+ */
+const version = hostVersion()
+const layout = options.layout ?? (/^0\.1\./u.test(version) ? 'settings-file' : 'forms')
+console.log(`host: ${version || '(unknown version)'} layout=${layout}`)
+
 const scratch = mkdtempSync(join(tmpdir(), 'daruma-e2e-'))
 const dshHome = join(scratch, 'home')
 const profile = 'daruma-e2e'
@@ -156,27 +189,19 @@ try {
   }, null, 2)}\n`)
   write(join(profileDir, 'cordis.yml'), '[]\n')
   write(join(profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
-  write(join(profileDir, 'settings.yaml'), `llm-pi-ai:
-  providers:
-    mock:
-      api: openai-completions
-      apiKeyEnv: MOCK_API_KEY
-      baseURL: http://127.0.0.1:${mockPort}/v1
-      retryPolicy:
-        mode: normal
-        maxRetries: ${options.maxRetries}
-      models:
-        - { id: mock-a, contextWindow: 65536 }
-        - { id: mock-b, contextWindow: 65536 }
-agent-default-model:
-  provider: mock
-  model: mock-a
-`)
-  write(join(profileDir, 'cordis.patch.yml'), `- id: settings
-  name: '@deepseek-ai/dsh-settings-file'
-  config:
-    path: ${join(profileDir, 'settings.yaml').replaceAll('\\', '/')}
-- id: dsh-daruma
+  const providerYaml = (indent) => `mock:
+  api: openai-completions
+  apiKeyEnv: MOCK_API_KEY
+  baseURL: http://127.0.0.1:${mockPort}/v1
+  retryPolicy:
+    mode: normal
+    maxRetries: ${options.maxRetries}
+  models:
+    - { id: mock-a, contextWindow: 65536 }
+    - { id: mock-b, contextWindow: 65536 }
+    - { id: mock-c, contextWindow: 65536 }
+`.split('\n').map((line) => (line === '' ? line : `${' '.repeat(indent)}${line}`)).join('\n')
+  const darumaRow = `- id: dsh-daruma
   name: dsh-daruma
   config:
     channels:
@@ -185,7 +210,40 @@ agent-default-model:
     failureBudget: ${options.failureBudget}
     stateFile: ${stateFile.replaceAll('\\', '/')}
     logFile: ${logFile.replaceAll('\\', '/')}
-`)
+`
+  // `--backup`: pre-seed the user's backup channel (mock-c, outside the chain)
+  // where this host generation stores it, so landing on mock-c proves the
+  // backup storage is read at runtime.
+  if (options.backup && layout === 'forms') {
+    write(join(profileDir, 'backup-channel.json'), `${JSON.stringify({ backup: { provider: 'mock', model: 'mock-c' } }, null, 2)}\n`)
+  }
+  const backupSettings = options.backup ? 'daruma:\n  backup:\n    provider: mock\n    model: mock-c\n' : ''
+  if (layout === 'forms') {
+    // DSH 0.2 removed settings.yaml + dsh-settings-file: the pi-ai provider and
+    // the default model are ordinary plugin rows in the profile patch.
+    write(join(profileDir, 'cordis.patch.yml'), `- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: mock
+    model: mock-a
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+${providerYaml(6)}${darumaRow}`)
+  } else {
+    write(join(profileDir, 'settings.yaml'), `llm-pi-ai:
+  providers:
+${providerYaml(4)}agent-default-model:
+  provider: mock
+  model: mock-a
+${backupSettings}`)
+    write(join(profileDir, 'cordis.patch.yml'), `- id: settings
+  name: '@deepseek-ai/dsh-settings-file'
+  config:
+    path: ${join(profileDir, 'settings.yaml').replaceAll('\\', '/')}
+${darumaRow}`)
+  }
   linkDirectory(join(repoRoot, 'packages', 'dsh-daruma'), join(profileDir, 'node_modules', 'dsh-daruma'))
   linkDirectory(join(repoRoot, 'packages', 'daruma-core'), join(profileDir, 'node_modules', 'daruma-core'))
 
@@ -221,16 +279,19 @@ agent-default-model:
   console.log(`--- dsh stdout ---\n${stdout.trim()}`)
   if (stderr.trim() !== '') console.log(`--- dsh stderr ---\n${stderr.trim()}`)
 
+  // With a seeded backup the failover must land on mock-c (the user's pick,
+  // outside the chain); otherwise on chain member mock-b.
+  const expectModel = options.backup ? 'mock-c' : 'mock-b'
   check('task exits 0', run.status === 0, `status=${String(run.status)} ${run.error?.message ?? ''}`)
-  check('task text came from the fallback channel', stdout.includes('mock completion from mock-b'), stdout.trim().split('\n').at(-1) ?? '')
+  check(`task text came from ${expectModel}`, stdout.includes(`mock completion from ${expectModel}`), stdout.trim().split('\n').at(-1) ?? '')
 
   const logText = existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''
   const records = logText.split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line) } catch { return {} } })
   const failover = records.find((record) => record.kind === 'failover')
   check('failover log has a boot line', records.some((record) => record.kind === 'boot'))
   check(
-    'failover log records mock-a -> mock-b (RATE_LIMIT)',
-    failover !== undefined && failover.from === 'mock::mock-a' && failover.to === 'mock::mock-b' && failover.reason === 'RATE_LIMIT',
+    `failover log records mock-a -> ${expectModel} (RATE_LIMIT)`,
+    failover !== undefined && failover.from === 'mock::mock-a' && failover.to === `mock::${expectModel}` && failover.reason === 'RATE_LIMIT',
     failover === undefined ? '(no failover line)' : JSON.stringify(failover),
   )
   // The escalation itself: a retryable code arriving from a normal-mode policy
@@ -245,7 +306,7 @@ agent-default-model:
 
   const health = existsSync(stateFile) ? safeJson(stateFile) : {}
   check('tripped channel is persisted as COOLDOWN', health?.healths?.['mock::mock-a']?.state === 'COOLDOWN', JSON.stringify(health?.healths?.['mock::mock-a'] ?? null))
-  check('fallback channel is HEALTHY', health?.healths?.['mock::mock-b']?.state === 'HEALTHY', JSON.stringify(health?.healths?.['mock::mock-b'] ?? null))
+  check(`fallback channel ${expectModel} is HEALTHY`, health?.healths?.[`mock::${expectModel}`]?.state === 'HEALTHY', JSON.stringify(health?.healths?.[`mock::${expectModel}`] ?? null))
 } catch (error) {
   console.error(`e2e aborted: ${error instanceof Error ? error.message : String(error)}`)
   failures.push('harness run')

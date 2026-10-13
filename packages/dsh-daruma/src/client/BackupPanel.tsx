@@ -13,6 +13,7 @@ import {
   Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CandidateView, DarumaApi, StatusView } from './api.ts'
+import { useLiveStatus } from './live-status.ts'
 
 type Translate = (key: string) => string
 
@@ -92,13 +93,16 @@ const CandidateRow = memo(function CandidateRow(props: {
   )
 })
 
-export function BackupPanel(props: {
+/**
+ * The picker itself, host-surface agnostic: the composer control renders it in
+ * a Modal, the settings section renders it inline.
+ */
+export function BackupChannelBody(props: {
   api: DarumaApi
   t: Translate
   status: StatusView | null
-  onClose: () => void
 }): React.JSX.Element {
-  const { api, t, status, onClose } = props
+  const { api, t, status } = props
   const [provider, setProvider] = useState(deriveProvider(status))
   const [candidates, setCandidates] = useState<CandidateView[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -170,17 +174,8 @@ export function BackupPanel(props: {
   const handleSetBackup = useCallback((model: string) => void setBackup(model), [provider])
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={t('backupManage')}
-      className="daruma-wide-dialog"
-      closeLabel={t('close')}
-      description={t('backupManageHint')}
-      footer={<Button variant="primary" onClick={onClose}>{t('close')}</Button>}
-    >
-      <div style={sectionStyle}>
-        {status !== null && status.failoverCount > 0 && (
+    <div style={sectionStyle}>
+      {status !== null && status.failoverCount > 0 && (
           <div style={noteStyle}>
             {t('failoverCount')}: {status.failoverCount}
             {status.failoverHistory.length > 0 && (
@@ -252,6 +247,44 @@ export function BackupPanel(props: {
           </>
         )}
       </div>
+  )
+}
+
+/** Composer-surface wrapper: the picker inside a Modal. */
+export function BackupPanel(props: {
+  api: DarumaApi
+  t: Translate
+  status: StatusView | null
+  onClose: () => void
+}): React.JSX.Element {
+  const { api, t, status, onClose } = props
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t('backupManage')}
+      className="daruma-wide-dialog"
+      closeLabel={t('close')}
+      description={t('backupManageHint')}
+      footer={<Button variant="primary" onClick={onClose}>{t('close')}</Button>}
+    >
+      <BackupChannelBody api={api} t={t} status={status} />
     </Modal>
   )
+}
+
+/**
+ * Settings-page surface: the same picker, inline. It reads its own status
+ * snapshot because the settings shell supplies no session status, and reloads
+ * that snapshot when a backup write lands anywhere — including this picker,
+ * so the composer control updates off the same notification.
+ */
+export function BackupSettings(props: {
+  api: DarumaApi
+  t: Translate
+}): React.JSX.Element {
+  const { api, t } = props
+  const { status } = useLiveStatus(api)
+
+  return <BackupChannelBody api={api} t={t} status={status} />
 }

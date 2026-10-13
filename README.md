@@ -25,7 +25,7 @@ model selector; clicking it opens the backup-channel picker.
 
 - **Automatic failover.** When the current model/channel trips after repeated failures (or hits a terminal error like `QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`), daruma switches the *next* request to another channel in your configured chain. The in-flight generation continues on the new channel — no lost sessions.
 - **Circuit breaker with persistent, self-healing state.** Each channel carries a health record (failures, cooldown) persisted to `~/.dsh/daruma/channel-health.json`. A tripped channel stays cooled down across restarts — and the **first successful request closes the circuit again**, so recovered channels never linger as zombie `COOLDOWN` entries.
-- **Backup channel UI.** A compact status dock next to the model selector shows overall health and your current backup. The backup panel lists candidate models per provider and lets you set/clear the backup channel manually — picked from real traffic, no synthetic speed tests.
+- **Backup channel UI.** A compact status dock next to the model selector shows overall health and your current backup. The backup panel lists candidate models per provider and lets you set/clear the backup channel manually — picked from real traffic, no synthetic speed tests. The same picker is also a **Backup channel** section in Settings, beside the other plugin sections.
 - **Live failover notices in the conversation.** When daruma switches channels mid-turn, the web UI renders a small `daruma` row right inside the chat flow (`mt::glm-5.3 failed (RATE_LIMIT) → trying mt::deepseek-v4-flash`, budget usage on hover). Exhausted recovery gets its own red-dotted **give-up row** instead of failing silently. Live-only: out-of-repo session events are not persisted by the harness yet.
 - **Durable JSONL audit log.** Every failover / give-up / boot decision is appended to `~/.dsh/daruma/failover-log.jsonl` (2 MiB rotation, best-effort) — channel switches stay auditable even though the harness does not persist plugin session events and server stdout is not captured to disk. See [Auditing failovers](#auditing-failovers).
 - **Deterministic decision engine.** All recovery logic lives in a pure function package (`daruma-core`): same failure history + same channel state → same recovery plan. No I/O, fully unit-tested.
@@ -94,7 +94,7 @@ Add a failover chain to your profile's `cordis.patch.yml`:
 
 > ⚠️ **Test profiles must isolate `stateFile`.** If you point a mock/test profile at the default file, mock channels pollute your production health records. Set `stateFile` (and the co-located `logFile` follows) to a profile-local path — see [`docs/e2e-test.md`](./docs/e2e-test.md).
 
-When the primary starts returning `429`, daruma trips it and continues on the next channel. Then open the web UI → click the channel-status dock (next to the model selector) → pick a backup channel from the candidate list; the backup is tried before the configured chain.
+When the primary starts returning `429`, daruma trips it and continues on the next channel. Then either click the channel-status dock next to the model selector, or open **Settings → Backup channel** → pick a backup channel from the candidate list; the backup is tried before the configured chain.
 
 ## Auditing failovers
 
@@ -117,9 +117,9 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 
 ## Status
 
-- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.7, `daruma-core` 0.1.5)
+- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.9, `daruma-core` 0.1.6)
 - Cross-platform: Windows, Linux and macOS — CI runs typecheck, lint, unit tests, build and the BOM guard on all three, and the failover end-to-end check on Linux and macOS; additionally verified locally inside WSL 2 (Ubuntu 24.04)
-- Unit tests: `daruma-core` 28 + `dsh-daruma` 71, all green
+- Unit tests: `daruma-core` 35 + `dsh-daruma` 104, all green
 - End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md)) — reproducible anywhere with `pnpm run e2e:failover`
 - Battle-tested in production on the author's DSH web instance: survived a real rate-limit storm on the primary (15 consecutive failures, multiple trips) and self-healed back to `HEALTHY` on the first successful request afterwards
 
@@ -128,7 +128,7 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 99 tests across both packages
+pnpm test            # 139 tests across both packages
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # repo hygiene: no file may start with a UTF-8 BOM
@@ -172,9 +172,15 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | works | works |
 | `0.1.2-alpha.2` … `0.1.3-*` | works | works |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | works | **blocked upstream** — `connection.rpc.handle()` throws `cannot get property "webServer" without inject` on those hosts for every third-party plugin; daruma logs it loudly and keeps failing over |
+| `0.2.0-rc.2`, `0.2.1-alpha.2` | works (backup channel included) | works over the `/api/dsh-daruma` fallback (RPC probed; browser rendering not yet checked) |
+
+On `0.2.x` the backup channel picked in the web panel is stored in
+`backup-channel.json` next to `channel-health.json`; `0.1.x` hosts keep it in
+the `daruma` settings namespace.
 
 Measured with `pnpm run e2e:failover` plus a route probe; details and raw
-evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md).
+evidence: [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md),
+[`docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md`](./docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md).
 
 ## Why "daruma"
 
@@ -206,7 +212,7 @@ daruma 控件在输入框工具行最右端、模型选择器旁边；点开它�
 
 - **自动故障转移。** 当前模型/渠道连续失败（或遇到 `QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED` 等终止性错误）后，daruma 把*下一个*请求切到你配置的链上的其他渠道，正在进行的生成在新渠道上继续 —— 会话不丢。
 - **持久化且自愈的断路器。** 每个渠道有健康记录（失败数、冷却），持久化到 `~/.dsh/daruma/channel-health.json`，重启后冷却中的渠道保持冷却；**第一个成功请求即重新闭合断路器**，早已恢复的渠道不会滞留成僵尸 `COOLDOWN` 记录。
-- **备用渠道界面。** 模型选择器旁的状态控件显示整体健康度与当前备用渠道。备用面板按 provider 列出候选模型，手动设置/清除备用 —— 基于真实流量，不做合成测速。
+- **备用渠道界面。** 模型选择器旁的状态控件显示整体健康度与当前备用渠道。备用面板按 provider 列出候选模型，手动设置/清除备用 —— 基于真实流量，不做合成测速。同一个选择器也是设置页里的 **备用渠道** 栏目，和其他插件栏目并列。
 - **会话内的实时切换提示。** daruma 在回合中途切换渠道时，Web UI 在聊天流里渲染一行小字（`mt::glm-5.3 failed (RATE_LIMIT) → trying mt::deepseek-v4-flash`，悬停显示预算用量）—— 不用翻日志就能看到恢复动作。恢复手段耗尽时渲染红点 **give-up 行**，不再无声失败。仅实时：宿主尚不持久化仓库外会话事件。
 - **持久化 JSONL 审计日志。** 每次切换/放弃/启动决策都追加到 `~/.dsh/daruma/failover-log.jsonl`（2 MiB 轮转，best-effort）—— 即使宿主不持久化插件会话事件、服务端 stdout 不落盘，渠道切换也可审计。见[审计切换记录](#审计切换记录)。
 - **确定性决策引擎。** 全部恢复逻辑在纯函数包（`daruma-core`）里：同样的失败历史 + 同样的渠道状态 → 同样的恢复方案。无 I/O，完整单测覆盖。
@@ -275,7 +281,7 @@ dsh plugin --profile web add dsh-daruma
 
 > ⚠️ **测试 profile 必须隔离 `stateFile`。** mock/测试 profile 若用默认文件，mock 渠道会污染生产健康记录。把 `stateFile`（连同同目录的 `logFile`）指到 profile 本地路径——见 [`docs/e2e-test.md`](./docs/e2e-test.md)。
 
-当主渠道开始返回 `429`，daruma 跳闸它并继续用下一个渠道。然后打开 Web UI → 点击模型选择器旁的渠道状态控件 → 在候选列表里选一个备用渠道；备用会在链之前优先尝试。
+当主渠道开始返回 `429`，daruma 跳闸它并继续用下一个渠道。然后点模型选择器旁的渠道状态控件，或打开 **设置 → 备用渠道** → 在候选列表里选一个备用渠道；备用会在链之前优先尝试。
 
 ## 审计切换记录
 
@@ -298,9 +304,9 @@ dsh plugin --profile web add dsh-daruma
 
 ## 状态
 
-- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.7、`daruma-core` 0.1.5）
+- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.9、`daruma-core` 0.1.6）
 - 跨平台：Windows / Linux / macOS —— CI 在三个系统上都跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 上实跑；另外在本机 WSL 2（Ubuntu 24.04）里全流程实跑通过
-- 单元测试（`daruma-core` 28 + `dsh-daruma` 71），全绿
+- 单元测试（`daruma-core` 35 + `dsh-daruma` 104），全绿
 - 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）——现在任何系统上一条 `pnpm run e2e:failover` 即可复现
 - 在作者的 DSH web 实例生产实战：扛过一次主渠道真实限流风暴（15 连败、多次跳闸），事后第一个成功请求即自愈回 `HEALTHY`
 
@@ -309,7 +315,7 @@ dsh plugin --profile web add dsh-daruma
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 两个包共 99 个测试
+pnpm test            # 两个包共 139 个测试
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # 仓库卫生：任何文件不得带 UTF-8 BOM
@@ -343,8 +349,12 @@ pnpm run e2e:failover
 | `0.1.0-rc.7` … `0.1.1-rc.2` | 可用 | 可用 |
 | `0.1.2-alpha.2` … `0.1.3-*` | 可用 | 可用 |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | 可用 | **上游阻塞** —— 这些宿主的 `connection.rpc.handle()` 对任何第三方插件都抛 `cannot get property "webServer" without inject`；daruma 会明确报警并继续保证故障转移 |
+| `0.2.0-rc.2`、`0.2.1-alpha.2` | 可用（含备用通道） | 经 `/api/dsh-daruma` 兜底通道可用（RPC 已实测；浏览器渲染未检查） |
 
-实测方式：`pnpm run e2e:failover` + 路由探针；细节与原始证据见 [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md)。
+在 `0.2.x` 上，Web 面板选的备用通道存在 `channel-health.json` 旁边的
+`backup-channel.json`；`0.1.x` 宿主仍存在 `daruma` 设置命名空间里。
+
+实测方式：`pnpm run e2e:failover` + 路由探针；细节与原始证据见 [`docs/aegis/evidence/2026-09-11-latest-harness-compat.md`](./docs/aegis/evidence/2026-09-11-latest-harness-compat.md)、[`docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md`](./docs/aegis/evidence/2026-10-10-dsh-0.2-compat.md)。
 
 ## 为什么叫 "daruma"
 

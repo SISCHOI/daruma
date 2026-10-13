@@ -75,6 +75,7 @@ function harness(options: {
       return () => { listeners.delete(event) }
     },
     inject: () => ({}),
+    get: (name: string) => (name === 'settings' ? { register: () => scope, mutate: async () => {} } : undefined),
     settings: { register: () => scope, mutate: async () => {} },
     llm: {
       resolveModelInfo: async () => {
