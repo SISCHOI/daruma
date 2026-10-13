@@ -117,9 +117,9 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 
 ## Status
 
-- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.7, `daruma-core` 0.1.5)
+- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.9, `daruma-core` 0.1.6)
 - Cross-platform: Windows, Linux and macOS — CI runs typecheck, lint, unit tests, build and the BOM guard on all three, and the failover end-to-end check on Linux and macOS; additionally verified locally inside WSL 2 (Ubuntu 24.04)
-- Unit tests: `daruma-core` 28 + `dsh-daruma` 71, all green
+- Unit tests: `daruma-core` 35 + `dsh-daruma` 104, all green
 - End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md)) — reproducible anywhere with `pnpm run e2e:failover`
 - Battle-tested in production on the author's DSH web instance: survived a real rate-limit storm on the primary (15 consecutive failures, multiple trips) and self-healed back to `HEALTHY` on the first successful request afterwards
 
@@ -128,7 +128,7 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 99 tests across both packages
+pnpm test            # 139 tests across both packages
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # repo hygiene: no file may start with a UTF-8 BOM
@@ -304,9 +304,9 @@ dsh plugin --profile web add dsh-daruma
 
 ## 状态
 
-- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.7、`daruma-core` 0.1.5）
+- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.9、`daruma-core` 0.1.6）
 - 跨平台：Windows / Linux / macOS —— CI 在三个系统上都跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 上实跑；另外在本机 WSL 2（Ubuntu 24.04）里全流程实跑通过
-- 单元测试（`daruma-core` 28 + `dsh-daruma` 71），全绿
+- 单元测试（`daruma-core` 35 + `dsh-daruma` 104），全绿
 - 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）——现在任何系统上一条 `pnpm run e2e:failover` 即可复现
 - 在作者的 DSH web 实例生产实战：扛过一次主渠道真实限流风暴（15 连败、多次跳闸），事后第一个成功请求即自愈回 `HEALTHY`
 
@@ -315,7 +315,7 @@ dsh plugin --profile web add dsh-daruma
 ```bash
 pnpm install
 pnpm build
-pnpm test            # 两个包共 99 个测试
+pnpm test            # 两个包共 139 个测试
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm check:no-bom    # 仓库卫生：任何文件不得带 UTF-8 BOM
