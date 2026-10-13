@@ -10,6 +10,7 @@ import { en, zh } from './locales.ts'
 import { createApi } from './api.ts'
 import { createAdaptiveRpc } from './adaptive-rpc.ts'
 import { StatusDock } from './StatusDock.tsx'
+import { BackupSettings } from './BackupPanel.tsx'
 import {
   createFailoverNoticeDefinition,
   FAILOVER_NOTICE_KIND,
@@ -122,6 +123,21 @@ export function apply(ctx: ClientContext): void {
     order: 0,
     inject: () => ({ api, t }),
   }, () => h(StatusDock, { api, t })))
+
+  // Settings → "Backup channel", beside the other plugin sections (the IM bot
+  // registers the same way). `settings.section` is a list slot: the registrant
+  // options carry the nav identity (`id`/`order`/`label`) and the shell renders
+  // the entry inside the settings content column. The slot name is the same on
+  // 0.1.5 and 0.2; where a host does not declare it, `slots.inject` never fires
+  // and the composer control above stays the only surface.
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'dsh-daruma',
+    order: 22,
+    label: () => t('backupManage'),
+    locale: NS,
+    inject: () => ({ api, t }),
+  }, () => h(BackupSettings, { api, t })))
 
   registerFailoverChatNotice(ctx)
 }
