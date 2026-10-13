@@ -13,6 +13,7 @@ import {
   Pill,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CandidateView, DarumaApi, StatusView } from './api.ts'
+import { useLiveStatus } from './live-status.ts'
 
 type Translate = (key: string) => string
 
@@ -274,23 +275,16 @@ export function BackupPanel(props: {
 
 /**
  * Settings-page surface: the same picker, inline. It reads its own status
- * snapshot because the settings shell supplies no session status.
+ * snapshot because the settings shell supplies no session status, and reloads
+ * that snapshot when a backup write lands anywhere — including this picker,
+ * so the composer control updates off the same notification.
  */
 export function BackupSettings(props: {
   api: DarumaApi
   t: Translate
 }): React.JSX.Element {
   const { api, t } = props
-  const [status, setStatus] = useState<StatusView | null>(null)
-
-  useEffect(() => {
-    let live = true
-    void api.status().then(
-      (value) => { if (live) setStatus(value) },
-      () => { /* keep the empty snapshot; the body renders its own error state */ },
-    )
-    return () => { live = false }
-  }, [api])
+  const { status } = useLiveStatus(api)
 
   return <BackupChannelBody api={api} t={t} status={status} />
 }

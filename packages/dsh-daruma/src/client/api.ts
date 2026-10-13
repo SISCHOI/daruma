@@ -41,9 +41,17 @@ export interface DarumaApi {
   listCandidates(provider: string): Promise<CandidateView[]>
   setBackup(provider: string, model: string): Promise<void>
   clearBackup(): Promise<void>
+  /**
+   * Fires after a backup write has landed. The settings page and the composer
+   * control are separate React trees over this one object, so a write in
+   * either of them tells the other to reload. A failed write does not fire.
+   * Returns the unsubscribe function.
+   */
+  subscribe(listener: () => void): () => void
 }
 
 export function createApi(rpc: Rpc): DarumaApi {
+  const listeners = new Set<() => void>()
   const call = async <T>(endpoint: string, payload?: unknown): Promise<T> => {
     const result = (await rpc(endpoint, payload)) as RpcResult<T>
     if (!result.ok) {
@@ -51,15 +59,33 @@ export function createApi(rpc: Rpc): DarumaApi {
     }
     return result.value as T
   }
+  // The write has already landed by the time this runs. One view that throws
+  // while refreshing must not hide the change from the others, nor fail the
+  // call the user just made.
+  const notify = (): void => {
+    for (const listener of listeners) {
+      try {
+        listener()
+      } catch {
+        // see above
+      }
+    }
+  }
 
   return {
     status: () => call<StatusView>('status'),
     listCandidates: (provider) => call<CandidateView[]>('listCandidates', { provider }),
     setBackup: async (provider, model) => {
       await call<{ ok: boolean }>('setBackup', { provider, model })
+      notify()
     },
     clearBackup: async () => {
       await call<{ ok: boolean }>('clearBackup')
+      notify()
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
     },
   }
 }

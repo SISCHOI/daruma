@@ -200,3 +200,8 @@ simply never fire the callback.
 > inject`. daruma logs that failure loudly and keeps failover working; the
 > panel needs the host fix. See
 > `docs/aegis/evidence/2026-09-11-latest-harness-compat.md`.
+
+DSH `0.2.x` is supported alongside `0.1.x`. The backup can also be chosen from
+Settings → Backup channel, and the control beside the composer updates as soon
+as that change is saved. On `0.2.x` the selection is stored in
+`backup-channel.json` next to the channel-health file.
