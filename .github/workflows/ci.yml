@@ -91,10 +91,6 @@ jobs:
           cat package.json
       - name: Install the DSH host
         working-directory: ${{ runner.temp }}/dsh-host
-        env:
-          # Pinning the older core set makes npm's peer resolution refuse the
-          # tree; the peers are not needed to boot the host.
-          NPM_CONFIG_LEGACY_PEER_DEPS: ${{ startsWith(matrix.dsh, '0.1.') }}
         run: npm install --no-audit --no-fund
       - name: Failover end-to-end
         run: node scripts/e2e-failover.mjs --dsh "${{ runner.temp }}/dsh-host/node_modules/@deepseek-ai/dsh/lib/bin.js"
