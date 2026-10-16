@@ -90,11 +90,11 @@ CI (branch `fix/ci-e2e-host-matrix`):
 | run | result |
 |---|---|
 | `38889708939` (first attempt) | 0.2.x 4/4 green; 0.1.x red with the peer-skip error |
-| `38891026340` | 13/14 green; `macos-latest, dsh 0.1.0-rc.7` failed inside `npm install` itself (`Abort trap: 6`, exit 134 — a V8 stack dump in npm, not a resolution error) |
-| rerun of that job | (see the run page) |
+| `38891026340` | 13/14 green; `macos-latest, dsh 0.1.0-rc.7` failed inside `npm install` itself — `JavaScript heap out of memory` after five minutes, and its rerun failed the same way, so it was not a one-off |
+| `38892899329` (heap raised for the install step) | 14/14 green |
 
-The install step now retries once, because that macOS crash is a runner-side npm flake rather than
-anything the tree decides.
+The macOS arm64 runner could not resolve the pinned tree inside npm's 2 GB default heap, so the
+install step now runs with `--max-old-space-size=4096` and retries once.
 
 ## Open
 
