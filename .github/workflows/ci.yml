@@ -91,7 +91,13 @@ jobs:
           cat package.json
       - name: Install the DSH host
         working-directory: ${{ runner.temp }}/dsh-host
-        run: npm install --no-audit --no-fund
+        env:
+          # Resolving the pinned 0.1.x tree costs npm more than its 2 GB default
+          # heap on the macOS arm64 runners: one 0.1.0-rc.7 job died with
+          # "JavaScript heap out of memory" after five minutes of install. The
+          # second run covers a runner that still manages to abort.
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm install --no-audit --no-fund || npm install --no-audit --no-fund
       - name: Failover end-to-end
         run: node scripts/e2e-failover.mjs --dsh "${{ runner.temp }}/dsh-host/node_modules/@deepseek-ai/dsh/lib/bin.js"
       - name: Failover end-to-end (user backup channel)
