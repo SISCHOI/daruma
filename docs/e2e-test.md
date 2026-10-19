@@ -63,6 +63,52 @@ Expect: `mock completion from mock-b`, exit 0, a failover line whose
 The manual walkthrough below is the same scenario step by step, for when you
 want to watch it in the browser or debug a specific stage.
 
+### Testing an older host line
+
+`--dsh <path>` exists so a host can be installed per test line instead of
+globally. That matters because an old host's caret ranges drift under it: `dsh`
+0.1.x pulls `cordis`, `cordis-plugin-loader`, `cordis-plugin-timer` and
+`cordis-plugin-hmr` through `^` ranges, and the 2026-09-22 batch of those four
+broke every 0.1.x CLI's headless boot:
+
+```
+Error: dsh: user patch-layer watching requires the Cordis HMR service
+    at watchUserPatches (…/dsh-app-boot/lib/index.js:764:28)
+    at runProfile (…/dsh/lib/profile-boot-*.js:264:9)
+```
+
+The new `cordis-plugin-hmr` throws from its constructor unless
+`ctx.loader.internal` exists — i.e. unless Node runs with `--expose-internals` —
+and the 0.1.x CLIs never pass that flag. Node also refuses it through
+`NODE_OPTIONS` (`--expose-internals is not allowed in NODE_OPTIONS`), so the
+host cannot be rescued from the outside. Pin the batch those hosts were
+validated against:
+
+```bash
+mkdir ~/dsh-host && cd ~/dsh-host
+npm init -y
+npm pkg set 'dependencies.@deepseek-ai/dsh=0.1.0-rc.7'
+npm pkg set 'overrides.@deepseek-ai/cordis=4.0.2'
+npm pkg set 'overrides.@deepseek-ai/cordis-plugin-loader=1.0.3'
+npm pkg set 'overrides.@deepseek-ai/cordis-plugin-timer=1.1.4'
+npm pkg set 'overrides.@deepseek-ai/cordis-plugin-hmr=1.0.17'
+npm install
+node scripts/e2e-failover.mjs --dsh "$PWD/node_modules/@deepseek-ai/dsh/lib/bin.js"
+```
+
+The set is peer-consistent: `cordis` 4.0.2 peers loader `^1.0.3`; loader 1.0.3
+and timer 1.1.4 peer `cordis ^4.0.2`; `dsh-app-boot` peers `cordis ^4.0.1`,
+loader `^1.0.2`, hmr `^1.0.16`. Do **not** reach for `--legacy-peer-deps`:
+`dsh-app-boot` declares that whole set as `peerDependencies`, so skipping peers
+leaves the host without `@deepseek-ai/cordis-plugin-group` and it dies on module
+resolution instead. The 0.2.x lines need no pin — they use
+`@deepseek-ai/dsh-hmr` rather than `cordis-plugin-hmr` and boot on the current
+batch.
+
+On CI's macOS arm64 runners, resolving the pinned tree can exceed npm's 2 GB
+default heap (`JavaScript heap out of memory` after ~5 minutes). Install with
+`NODE_OPTIONS=--max-old-space-size=4096` there.
+
 ## One-command web test environment
 
 Windows (PowerShell wrapper) and any OS (Node):
