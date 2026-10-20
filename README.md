@@ -173,6 +173,9 @@ pnpm run e2e:failover
 | `0.1.2-alpha.2` … `0.1.3-*` | works | works |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | works | **blocked upstream** — `connection.rpc.handle()` throws `cannot get property "webServer" without inject` on those hosts for every third-party plugin; daruma logs it loudly and keeps failing over |
 | `0.2.0-rc.2`, `0.2.1-alpha.2` | works (backup channel included) | works over the `/api/dsh-daruma` fallback (RPC probed; browser rendering not yet checked) |
+| **`0.2.1-rc.2`** | **verified** — chain failover 7/7, user-selected backup 7/7 | backup-management RPC 12/12 over `/api/dsh-daruma`; browser rendering not yet checked |
+
+**DSH 0.2.1 support:** tested with `dsh-daruma` 0.1.9 on `0.2.1-rc.2` (2026-10-20). The stable `0.2.1` release was not available at verification time. Inline failover/give-up chat notices still use the older conversation-event registry entry point and may be missing on this host; this UI limitation does not affect the verified failover engine or backup-management RPC. See the [0.2.1 verification report](./docs/aegis/evidence/2026-10-20-dsh-0.2.1-rc.2-compat.md).
 
 On `0.2.x` the backup channel picked in the web panel is stored in
 `backup-channel.json` next to `channel-health.json`; `0.1.x` hosts keep it in
@@ -350,6 +353,9 @@ pnpm run e2e:failover
 | `0.1.2-alpha.2` … `0.1.3-*` | 可用 | 可用 |
 | `0.1.5-alpha.1` … `0.1.5-rc.2` | 可用 | **上游阻塞** —— 这些宿主的 `connection.rpc.handle()` 对任何第三方插件都抛 `cannot get property "webServer" without inject`；daruma 会明确报警并继续保证故障转移 |
 | `0.2.0-rc.2`、`0.2.1-alpha.2` | 可用（含备用通道） | 经 `/api/dsh-daruma` 兜底通道可用（RPC 已实测；浏览器渲染未检查） |
+| **`0.2.1-rc.2`** | **实测通过**——链式切换 7/7、指定备用 7/7 | 备用管理 RPC 经 `/api/dsh-daruma` 通过 12/12；浏览器渲染未检查 |
+
+**支持 DSH 0.2.1 版本线：** 2026-10-20 使用 `dsh-daruma` 0.1.9 在 `0.2.1-rc.2` 上完成验证，验证时尚无 `0.2.1` 正式版。会话内切换/放弃提示仍使用旧的聊天事件注册入口，在该宿主上可能缺失；这项 UI 限制不影响已实测的故障转移引擎和备用管理 RPC。详见 [0.2.1 验证报告](./docs/aegis/evidence/2026-10-20-dsh-0.2.1-rc.2-compat.md)。
 
 在 `0.2.x` 上，Web 面板选的备用通道存在 `channel-health.json` 旁边的
 `backup-channel.json`；`0.1.x` 宿主仍存在 `daruma` 设置命名空间里。
