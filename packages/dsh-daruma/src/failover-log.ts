@@ -1,11 +1,10 @@
 /**
  * Append-only JSONL log of daruma's recovery decisions.
  *
- * The harness does not yet persist out-of-repo session events, and the web
- * server's stdout (where the ctx.logger.warn lines go) is not captured to
- * disk — so without this file a channel switch leaves **no auditable trace**.
- * Every failover / give-up / boot is therefore appended here as one JSON
- * line, giving post-hoc audits (like the 2026-09-08 one) a durable record.
+ * This file is the only durable record of a channel switch. Plugin session
+ * events are not written: a `daruma/*` type is unknown to the harness and,
+ * without an `ignorable` marker the append API cannot set, the host refuses
+ * to load the whole session.
  *
  * Failure semantics: logging must never break recovery. Every I/O error is
  * swallowed; the worst case is a missing or truncated line, never a lost

@@ -124,6 +124,7 @@ async function armFailover(h: Harness, agent: Agent): Promise<void> {
     async () => undefined,
   )
   expect(action).toEqual({ kind: 'retry' })
+  expect(agent.session.append).not.toHaveBeenCalled()
 }
 
 afterAll(() => {

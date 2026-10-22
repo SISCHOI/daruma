@@ -52,10 +52,12 @@ interface ConversationEventsLike {
 }
 
 /**
- * Register the live failover notice: one conversation Definition claiming
- * `daruma/failover` events for the chat target, plus the keyed renderer for
- * its node kind. Absent or failing registrations degrade to nothing visible
- * (warn only) — the panel keeps working either way.
+ * Register the failover notice for sessions that already contain it: one
+ * conversation Definition claiming `daruma/failover` events for the chat
+ * target, plus the keyed renderer for its node kind. Current builds no
+ * longer append these events — an unmarked plugin event type makes the host
+ * refuse the whole session — so a newly written session never produces a row.
+ * Absent or failing registrations degrade to nothing visible (warn only).
  */
 function registerFailoverChatNotice(ctx: ClientContext): void {
   const registry = ctx.get('conversationEvents') as ConversationEventsLike | undefined
