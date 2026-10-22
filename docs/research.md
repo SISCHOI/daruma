@@ -71,7 +71,7 @@ daruma-core（纯域层，零运行时依赖）
 
 - **备用渠道**：存 `daruma:` settings namespace（`ctx.settings`），failover 决策优先选备用（`decide().preferred`）。
 - **settings 空对象怪癖**：schemastery 对缺省 section 解析为空对象 `{}` 而非 `undefined`，`getBackup()` 必须校验 provider/model 非空，否则空对象会被当成合法 backup 选中（曾导致 failover 切到字段全 undefined 的渠道）。
-- **状态 UI**：client bundle 挂 `conversation.input.dock`（常驻状态条）+ 弹出面板（候选测试/设备用），经 `/dsh-daruma` RPC 通信；failover 追加 durable `daruma/failover` 事件。
+- **状态 UI**：client bundle 挂 `conversation.input.dock`（常驻状态条）+ 弹出面板（候选测试/设备用），经 `/dsh-daruma` RPC 通信。切换决策只进 `failover-log.jsonl`，不再追加 `daruma/failover` 会话事件：宿主不认识且未标 `ignorable` 的事件类型会让整段会话拒载。客户端仍注册该事件的会话定义，供旧会话在宿主接受日志时渲染。
 - **failover 历史**：engine 内存保留最近 5 次 failover，状态条显示「最近切换」。完整的会话流 conversation node 事件行暂缓。
 
 ## 4. 验证状态

@@ -44,20 +44,13 @@ channel stays cooled-down across restarts.
 
 ## Visible failover notices in the conversation
 
-When a channel switch happens mid-turn, the web client renders a small
-`daruma` row **inside the conversation flow** (anchored at the failover event,
-right where it occurred): `mt::glm-5.3 failed (RATE_LIMIT) → trying
-mt::deepseek-v4-flash`, with the budget usage
-(`failover 2/3 · turn 3 step 1`) on hover. When recovery is exhausted, a
-red-dotted **give-up row** (`mt::glm-5.3 failed (RATE_LIMIT) → recovery
-budget exhausted, giving up`) renders instead of failing silently.
-
-This works through the host's plugin-extensible conversation engine: the
-client registers definitions claiming `daruma/failover` / `daruma/give-up`
-session events plus a keyed renderer for its node kind, mirroring how
-in-repo retries render. The notices are **live-only** — out-of-repo session
-events are not yet persisted by the harness, so rows do not survive a page
-reload or a resumed session.
+Older builds appended a `daruma/failover` session event on each channel
+switch, and the web client renders that as a small row inside the
+conversation (`mt::glm-5.3 failed (RATE_LIMIT) → trying
+mt::deepseek-v4-flash`, budget usage on hover; a red-dotted give-up row when
+recovery is exhausted). Current builds do not append it. The host cannot mark
+a plugin event ignorable, and a session containing an unmarked `daruma/*`
+event fails to load. New switches are recorded only in the audit log.
 
 ## Usage screenshots / 使用截图
 
@@ -176,9 +169,12 @@ pnpm --filter dsh-daruma test
 
 ## Host compatibility boundary
 
-The recovery engine is independent of DSH runtime objects. Host-facing session
-writes go through `src/event-sink.ts`; a Session API change or an unavailable
-custom event surface is logged and degraded without interrupting failover.
+Recovery decisions are not written into the session log. `session.append`
+cannot mark a plugin event `ignorable`, and a harness that does not know
+`daruma/failover` or `daruma/give-up` refuses to load any session containing
+one. The JSONL audit log is the durable record. The client still registers a
+conversation definition for those two types, so a session written by an older
+build can render them when its host accepts the log.
 `src/host-capabilities.ts` records optional host surfaces (RPC and conversation
 event registry) so client integrations can remain capability-driven as DSH
 releases evolve.

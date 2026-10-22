@@ -17,8 +17,10 @@
  * instead of waiting for `failureBudget` failing turns (see `isRetryExhausted`).
  *
  * Additionally mounts the `/dsh-daruma` RPC channel (status, candidate
- * discovery, backup selection) for the web client UI, and appends a durable
- * `daruma/failover` session event on every channel switch.
+ * discovery, backup selection) for the web client UI. Recovery decisions are
+ * recorded only in the JSONL audit log: appending `daruma/*` session events
+ * leaves an unmarked type the host does not know, and current harnesses then
+ * refuse to load the whole session.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -36,11 +38,10 @@ import { resolveConfig, type PluginConfig } from './config.ts'
 import { RecoveryEngine } from './engine.ts'
 import { JsonFileChannelHealthStore } from './store.ts'
 import { JsonlFailoverLogStore } from './failover-log.ts'
-import { buildDarumaFailoverEvent, buildDarumaGiveUpEvent, type DarumaFailoverEvent, type DarumaGiveUpEvent } from './failover-events.ts'
+import type { DarumaFailoverEvent, DarumaGiveUpEvent } from './failover-events.ts'
 import { mountStatus } from './status.ts'
 import { mountRpc } from './rpc.ts'
 import { modelId, type Channel, type ChannelId } from 'daruma-core'
-import { createEventSink } from './event-sink.ts'
 import { mountWithWebTransport } from './host-mount.ts'
 
 export const name = 'dsh-daruma'
@@ -90,7 +91,6 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const failoverLog = new JsonlFailoverLogStore(config.logFile)
   const status = mountStatus(ctx.get('settings'), config.backupFile)
   ctx.logger.info(`dsh-daruma: backup channel stored via ${status.storageKind}`)
-  const eventSink = createEventSink(ctx.logger)
 
   // Boot record: one line per plugin start, so audits can align restart
   // boundaries with the failover/give-up lines that follow.
@@ -155,22 +155,10 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
     if (plan.verdict.kind === 'FAILOVER') {
       pending.set(payload.agent.id, plan.verdict.target)
-      const event = buildDarumaFailoverEvent({
-        from: channel,
-        to: plan.verdict.target.id,
-        reason: signal.code,
-        at: Date.now(),
-        agentId: payload.agent.id,
-        turn: payload.turn,
-        step: payload.step,
-        failure: payload.failure,
-        failoverCount: plan.failoverCount,
-        giveUpBudget: engine.giveUpBudget,
-      })
-      eventSink.append(payload.agent, { type: 'daruma/failover', value: event })
+      const at = Date.now()
       failoverLog.append({
         kind: 'failover',
-        t: event.at,
+        t: at,
         agentId: payload.agent.id,
         from: channel,
         to: plan.verdict.target.id,
@@ -190,23 +178,13 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     }
 
     if (plan.verdict.kind === 'GIVE_UP') {
-      const giveUpEvent = buildDarumaGiveUpEvent({
-        from: channel,
-        reason: plan.verdict.reason === 'no-routable-fallback' ? 'no-routable-fallback' : 'give-up-budget-exhausted',
-        at: Date.now(),
-        agentId: payload.agent.id,
-        turn: payload.turn,
-        step: payload.step,
-        failoverCount: plan.failoverCount,
-        giveUpBudget: engine.giveUpBudget,
-      })
-      eventSink.append(payload.agent, { type: 'daruma/give-up', value: giveUpEvent })
+      const reason = plan.verdict.reason === 'no-routable-fallback' ? 'no-routable-fallback' : 'give-up-budget-exhausted'
       failoverLog.append({
         kind: 'give-up',
-        t: giveUpEvent.at,
+        t: Date.now(),
         agentId: payload.agent.id,
         from: channel,
-        reason: giveUpEvent.reason,
+        reason,
         status: payload.failure.status,
         turn: payload.turn,
         step: payload.step,

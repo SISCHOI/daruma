@@ -1,11 +1,11 @@
 /**
- * Durable `daruma/failover` session-event assembly.
+ * `daruma/failover` event shape, retained for sessions written by older builds.
  *
- * Kept a pure, framework-free module so the event contract is unit-testable
- * without mounting the host runtime. The event is appended to the agent's
- * session log at failover-decision time and survives in the zstd session
- * archive, giving every channel switch a traceable record (agent, turn, step,
- * failure detail, and budget state at the moment of the decision).
+ * Current builds do not append this event. `session.append` cannot set the
+ * envelope's `ignorable` marker, and a harness that does not list the type
+ * refuses to load any session containing an unmarked one. The JSONL audit log
+ * is the durable record; this shape stays so the client can still render an
+ * event an older build already wrote.
  */
 
 import type { LlmFailure } from '@deepseek-ai/dsh-llm'
