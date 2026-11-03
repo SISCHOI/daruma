@@ -48,6 +48,27 @@ Expect: `mock completion from mock-b`, exit 0, a failover line whose
 `reason` is `RATE_LIMIT` **and** `retryExhausted` is `true`, and
 `mock::mock-a` persisted as `COOLDOWN` with `consecutiveFailures: 1`.
 
+### A provider refusing the conversation (request-level `400`)
+
+`--reject` puts `mock-reject` between the failing and the healthy channel; it
+answers the `400` a real conversation can trigger (DeepSeek's
+"`content[].thinking` … must be passed back", see
+[evidence/2026-11-03-deepseek-thinking-replay.md](aegis/evidence/2026-11-03-deepseek-thinking-replay.md)).
+The run reproduces the production sequence: the primary fails, the switch lands
+on a channel that refuses this conversation, and the turn hops once more and
+completes.
+
+```bash
+node scripts/e2e-failover.mjs --dsh <bin.js> --reject
+```
+
+Expect: `mock completion from mock-b`, exit 0, two failover lines
+(`mock-a -> mock::mock-reject` with reason `RATE_LIMIT`, then
+`mock::mock-reject -> mock::mock-b` with reason `INVALID_REQUEST`), no
+`give-up` line, `mock::mock-a` as `COOLDOWN` — and `mock::mock-reject` still
+`HEALTHY` with zero failures, because a request-level refusal must not bench a
+channel that serves every other conversation.
+
 > **Running inside WSL?** WSL appends the Windows PATH, so a bare `dsh` can
 > resolve to the **Windows** install under `/mnt/c/…`; Linux node then fails to
 > load its `sharp`/`koffi` binaries. The script refuses such a host before
