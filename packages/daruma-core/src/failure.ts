@@ -15,6 +15,7 @@ export const FAILURE_CODES = [
   'QUOTA',
   'CONTEXT_WINDOW_EXCEEDED',
   'INVALID_CREDENTIAL',
+  'INVALID_REQUEST',
   'UNKNOWN',
 ] as const
 
@@ -36,6 +37,18 @@ const TERMINAL_CODES: ReadonlySet<FailureCode> = new Set([
   'INVALID_CREDENTIAL',
 ])
 
+/**
+ * Failures the provider raised against the *request* rather than the channel.
+ *
+ * A provider that refuses one conversation's shape (the production case:
+ * DeepSeek's Messages API rejects an assistant turn carrying `tool_use` but no
+ * `thinking` block while thinking mode is on) answers `400 INVALID_REQUEST`.
+ * The channel itself keeps serving every other session, so benching it with a
+ * global cooldown would take a healthy route out of service; the honest
+ * response is to drop that channel for this conversation only.
+ */
+const REQUEST_SCOPED_CODES: ReadonlySet<FailureCode> = new Set(['INVALID_REQUEST'])
+
 export function isRetryableCode(code: FailureCode): boolean {
   // UNKNOWN is treated as retryable (conservative): try once more rather
   // than immediately burning a channel.
@@ -44,4 +57,12 @@ export function isRetryableCode(code: FailureCode): boolean {
 
 export function isTerminalCode(code: FailureCode): boolean {
   return TERMINAL_CODES.has(code)
+}
+
+/**
+ * Whether this failure excludes its channel from the current conversation only,
+ * leaving channel health untouched.
+ */
+export function isRequestScopedCode(code: FailureCode): boolean {
+  return REQUEST_SCOPED_CODES.has(code)
 }

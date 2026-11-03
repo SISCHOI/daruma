@@ -104,6 +104,95 @@ describe('RecoveryEngine', () => {
     expect(engine.giveUpBudget).toBe(config.giveUpBudget)
   })
 
+  describe('request-scoped rejection', () => {
+    const rejectingConfig: RecoveryPolicyConfig = {
+      ...config,
+      channels: [...config.channels, { id: C, provider: 'mt', model: modelId('qwen-3') }],
+    }
+
+    it('remembers the rejected channel for that scope only', () => {
+      const store = new MemoryStore()
+      const engine = new RecoveryEngine(rejectingConfig, store, { nowMs: () => 1000 })
+      engine.onFailure({ code: 'INVALID_REQUEST', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+
+      expect(engine.unusableFor('agent-1')).toEqual([A])
+      expect(engine.unusableFor('agent-2')).toEqual([])
+      // The channel keeps its health: it is fine for everyone else.
+      expect(store.map.get(A)?.state ?? 'HEALTHY').toBe('HEALTHY')
+    })
+
+    it('does not route a rejected scope back to the same channel', () => {
+      const engine = new RecoveryEngine(rejectingConfig, new MemoryStore(), { nowMs: () => 1000 })
+      const first = engine.onFailure(
+        { code: 'INVALID_REQUEST', channel: A, occurredAtMs: 1000 },
+        { id: B, provider: 'mt', model: modelId('glm-5.2') },
+        'agent-1',
+      )
+      expect(first.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+
+      // B is the configured backup; the next rejection on B must not return to A.
+      const second = engine.onFailure(
+        { code: 'INVALID_REQUEST', channel: B, occurredAtMs: 1000 },
+        { id: B, provider: 'mt', model: modelId('glm-5.2') },
+        'agent-1',
+      )
+      expect(second.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: C } })
+    })
+
+    it('lets another scope use the same channel', () => {
+      const engine = new RecoveryEngine(rejectingConfig, new MemoryStore(), { nowMs: () => 1000 })
+      engine.onFailure({ code: 'INVALID_REQUEST', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+      const other = engine.onFailure({ code: 'QUOTA', channel: A, occurredAtMs: 1000 }, undefined, 'agent-2')
+      expect(other.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    })
+
+    it('forgets exclusions when the scope is disposed', () => {
+      const engine = new RecoveryEngine(rejectingConfig, new MemoryStore(), { nowMs: () => 1000 })
+      engine.onFailure({ code: 'INVALID_REQUEST', channel: A, occurredAtMs: 1000 }, undefined, 'agent-1')
+      engine.clearScope('agent-1')
+      expect(engine.unusableFor('agent-1')).toEqual([])
+    })
+
+    /**
+     * Replays the observed production sequence (2026-11-03): the primary mt
+     * channel times out, failover lands on the DeepSeek backup, DeepSeek rejects
+     * the conversation's history, and the old policy went straight back to the
+     * primary — then to DeepSeek again — until the turn died at the eighth
+     * failover. The turn now lands on the third channel instead.
+     */
+    it('keeps a turn alive across a rejected backup instead of ping-ponging', () => {
+      const backupB = { id: B, provider: 'mt', model: modelId('deepseek-flash') }
+      let now = 1000
+      const engine = new RecoveryEngine(rejectingConfig, new MemoryStore(), { nowMs: () => now })
+
+      const first = engine.onFailure(
+        { code: 'TIMEOUT', channel: A, occurredAtMs: now, retryExhausted: true },
+        backupB,
+        'turn-1',
+      )
+      expect(first.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+
+      const second = engine.onFailure(
+        { code: 'INVALID_REQUEST', channel: B, occurredAtMs: now },
+        backupB,
+        'turn-1',
+      )
+      expect(second.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: C } })
+
+      // Once A's own cooldown expires the turn returns to it — never to the
+      // backup that rejected this conversation.
+      now = 1000 + rejectingConfig.cooldownMs + 1
+      const third = engine.onFailure(
+        { code: 'TIMEOUT', channel: C, occurredAtMs: now, retryExhausted: true },
+        backupB,
+        'turn-1',
+      )
+      expect(third.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: A } })
+      expect(engine.failoverCountFor('turn-1')).toBe(3)
+      expect(engine.failoverCountFor('turn-1')).toBeLessThan(rejectingConfig.giveUpBudget)
+    })
+  })
+
   describe('onSuccess', () => {
     it('resets a tripped channel to HEALTHY and persists it', () => {
       const store = new MemoryStore()

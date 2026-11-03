@@ -6,7 +6,7 @@
  * implements.
  */
 
-export { FAILURE_CODES, isRetryableCode, isTerminalCode } from './failure.ts'
+export { FAILURE_CODES, isRequestScopedCode, isRetryableCode, isTerminalCode } from './failure.ts'
 export type { FailureCode } from './failure.ts'
 
 export { channelId, modelId } from './channel.ts'

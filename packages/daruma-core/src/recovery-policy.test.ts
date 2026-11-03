@@ -166,6 +166,104 @@ describe('recovery policy decide()', () => {
 })
 
 /**
+ * The production failure these cover (2026-11-03): DeepSeek's Messages API
+ * rejects an assistant turn that carries `tool_use` but no `thinking` block
+ * while thinking mode is on, answering `400 INVALID_REQUEST`. The channel is
+ * healthy — it serves every other conversation — so the route must not be
+ * benched, and the turn must not be re-sent to it.
+ */
+describe('request-scoped rejection', () => {
+  const rejected = (channel = A): FailureSignal => signal('INVALID_REQUEST', channel)
+
+  it('fails over on the first rejection without cooling the channel', () => {
+    const plan = decide({
+      signal: rejected(),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    // Untouched: a global cooldown would take a working channel out of service.
+    expect(plan.healthAfter).toMatchObject({ state: 'HEALTHY', consecutiveFailures: 0 })
+    expect(plan.failoverCount).toBe(1)
+  })
+
+  it('skips a channel this conversation already lost', () => {
+    const plan = decide({
+      signal: rejected(B),
+      healths: healthsOf([[A, freshHealth(A, 0)], [B, freshHealth(B, 0)]]),
+      failoverCount: 1,
+      config,
+      nowMs: 1000,
+      unusableChannels: new Set([A]),
+    })
+    // A stays out even though it looks healthy and cheaper to reach.
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: C } })
+  })
+
+  it('never picks the rejected channel even when it is the backup', () => {
+    const plan = decide({
+      signal: rejected(A),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+      preferred: channels[1]!, // B
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+
+    const second = decide({
+      signal: rejected(A),
+      healths: healthsOf([[A, freshHealth(A, 0)], [B, freshHealth(B, 0)]]),
+      failoverCount: 1,
+      config,
+      nowMs: 1000,
+      preferred: channels[1]!, // B, now unusable for this conversation
+      unusableChannels: new Set([A, B]),
+    })
+    expect(second.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: C } })
+  })
+
+  it('gives up when every channel is excluded for this conversation', () => {
+    const plan = decide({
+      signal: rejected(A),
+      healths: healthsOf([]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+      unusableChannels: new Set([A, B, C]),
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'GIVE_UP', reason: 'no-routable-fallback' })
+    expect(plan.failoverCount).toBe(0)
+  })
+
+  it('still respects the give-up budget', () => {
+    const plan = decide({
+      signal: rejected(B),
+      healths: healthsOf([]),
+      failoverCount: 8,
+      config,
+      nowMs: 1000,
+      unusableChannels: new Set([A]),
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'GIVE_UP', reason: 'give-up-budget-exhausted' })
+  })
+
+  it('is deterministic for a rejection', () => {
+    const mk = () => ({
+      signal: rejected(),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+      unusableChannels: new Set([B]),
+    })
+    expect(decide(mk())).toEqual(decide(mk()))
+  })
+})
+
+/**
  * The production failure these cover (2026-09-17): five consecutive `RATE_LIMIT`
  * failures on one channel inside a single step never switched channels.
  *

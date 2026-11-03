@@ -10,6 +10,7 @@
 import {
   decide,
   freshHealth,
+  isRequestScopedCode,
   recordSuccess,
   type Channel,
   type ChannelHealth,
@@ -45,6 +46,12 @@ export class RecoveryEngine {
   private readonly healths = new Map<ChannelId, ChannelHealth>()
   private failoverTotal = 0
   private readonly failoversByScope = new Map<string, number>()
+  /**
+   * Channels a scope must no longer route to, because the provider refused that
+   * conversation's own content. Kept per scope: the channel is healthy for every
+   * other conversation, so this never becomes a global cooldown.
+   */
+  private readonly unusableByScope = new Map<string, Set<ChannelId>>()
   private readonly failoverHistory: FailoverRecord[] = []
   private readonly clock: Clock
 
@@ -70,12 +77,14 @@ export class RecoveryEngine {
    * identify an agent/session so independent tasks do not share a budget. */
   onFailure(signal: FailureSignal, preferred?: Channel, scope = 'global'): RecoveryPlan {
     const scopedCount = this.failoversByScope.get(scope) ?? 0
+    if (isRequestScopedCode(signal.code)) this.excludeForScope(scope, signal.channel)
     const plan = decide({
       signal,
       healths: this.healths,
       failoverCount: scopedCount,
       config: this.config,
       nowMs: this.clock.nowMs(),
+      unusableChannels: this.unusableByScope.get(scope),
       ...(preferred !== undefined ? { preferred } : {}),
     })
     this.healths.set(signal.channel, plan.healthAfter)
@@ -99,6 +108,18 @@ export class RecoveryEngine {
   /** Release per-agent/session counters when the host disposes the scope. */
   clearScope(scope: string): void {
     this.failoversByScope.delete(scope)
+    this.unusableByScope.delete(scope)
+  }
+
+  /** Channels this scope cannot route to, for tracing and tests. */
+  unusableFor(scope: string): readonly ChannelId[] {
+    return [...(this.unusableByScope.get(scope) ?? [])]
+  }
+
+  private excludeForScope(scope: string, channel: ChannelId): void {
+    const blocked = this.unusableByScope.get(scope) ?? new Set<ChannelId>()
+    blocked.add(channel)
+    this.unusableByScope.set(scope, blocked)
   }
 
   /**

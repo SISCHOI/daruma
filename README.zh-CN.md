@@ -48,6 +48,8 @@ dsh plugin --profile web add dsh-daruma
 
 当 `deepseek-v4-pro` 开始回 `429`，daruma 熔断它、改用 `glm-5.2` 继续。渠道健康状态落到 `~/.dsh/daruma/channel-health.json`，被熔断的渠道在重启后依然保持冷却；成功请求会自动闭合断路器（由下一个 `agent/pre-step` 推断）。每次切换/放弃决策同时追加到 `~/.dsh/daruma/failover-log.jsonl`，可事后审计。
 
+渠道故障和请求被拒要分开处理。`400 INVALID_REQUEST` 是服务端拒收**这段对话的内容**（实测形态：DeepSeek 的 thinking 模式下，带 `tool_use` 的 assistant 消息必须附 thinking 块，所以从别的模型开始的会话无法直接搬过去），此时渠道对其它会话完全正常，daruma 不会把它熔断，只在**当前会话内**把它记为不可用并换下一个渠道，直到会话结束。
+
 ## 为什么叫 daruma
 
 [达摩不倒翁](https://en.wikipedia.org/wiki/Daruma_doll) 源自一句谚语——**七転八起**（跌七次，起八次）。你的长任务也一样：被 `429` 击中，再爬起来。

@@ -40,6 +40,9 @@ describe('mapping', () => {
     expect(toFailureCode('RATE_LIMIT')).toBe('RATE_LIMIT')
     expect(toFailureCode('SERVER')).toBe('SERVER')
     expect(toFailureCode('QUOTA')).toBe('QUOTA')
+    // A provider refusing one request's shape must stay distinguishable from an
+    // unknown failure: it routes by conversation, not by channel health.
+    expect(toFailureCode('INVALID_REQUEST')).toBe('INVALID_REQUEST')
   })
 
   it('downgrades unknown codes to UNKNOWN', () => {

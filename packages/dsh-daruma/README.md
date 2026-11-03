@@ -20,7 +20,10 @@ daruma. daruma then:
    target does not advertise the level (see below);
 4. appends one JSON line per decision to the audit log (see below).
 
-**A failover target has to accept the request.** DSH validates an explicit
+**A failover target has to accept the request.** Two different refusals hide
+behind that sentence.
+
+*A channel-level refusal* is the usual one: DSH validates an explicit
 `reasoningEffort` against the **target's** own capability and refuses the
 request before any provider I/O; that refusal is raised outside
 `agent/request-error`, so a swapped request carrying an effort the target
@@ -32,6 +35,17 @@ the target can use its own default, and the drop is logged —
 `dsh-daruma: mt::glm-5.3 does not accept reasoning effort "high" …`. Every
 other field (`maxTokens`, temperature, stop sequences) is passed through
 untouched.
+
+*A request-level refusal* is the provider answering `400 INVALID_REQUEST`
+because of what the conversation contains. The observed case: DeepSeek's
+Messages API rejects any assistant turn that carries `tool_use` but no
+`thinking` block while thinking mode is on, so a conversation that started on a
+non-DeepSeek model cannot be replayed there. That channel is healthy for every
+other conversation, so daruma does not open its circuit; it records the channel
+as unusable **for that conversation only** (`INVALID_REQUEST` is request-scoped,
+see `daruma-core`) and picks a different target. The exclusion lasts until the
+conversation's scope is disposed, so one rejected step cannot drag the turn
+back to the same dead route and burn the give-up budget.
 
 **Self-healing:** the host exposes no request-success event, so success is
 inferred — an agent whose previous model request never tripped
