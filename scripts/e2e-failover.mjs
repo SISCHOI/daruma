@@ -295,9 +295,11 @@ ${darumaRow}`)
   if (stderr.trim() !== '') console.log(`--- dsh stderr ---\n${stderr.trim()}`)
 
   // With a seeded backup the failover must land on mock-c (the user's pick,
-  // outside the chain); with `--reject` the first switch lands on the refusing
-  // channel and the turn has to hop once more; otherwise on mock-b directly.
-  const expectModel = options.reject ? 'mock-b' : options.backup ? 'mock-c' : 'mock-b'
+  // outside the chain); with `--reject` and no backup, the first switch lands on
+  // the refusing channel and the turn has to hop once more; otherwise on mock-b.
+  const expectModel = options.backup ? 'mock-c' : 'mock-b'
+  // The refusing channel is only reached when no preferred backup pre-empts it.
+  const reachesReject = options.reject && !options.backup
   check('task exits 0', run.status === 0, `status=${String(run.status)} ${run.error?.message ?? ''}`)
   check(`task text came from ${expectModel}`, stdout.includes(`mock completion from ${expectModel}`), stdout.trim().split('\n').at(-1) ?? '')
 
@@ -307,7 +309,7 @@ ${darumaRow}`)
   const failover = failovers[0]
   check('failover log has a boot line', records.some((record) => record.kind === 'boot'))
 
-  if (options.reject) {
+  if (reachesReject) {
     // Production shape: primary fails, the switch lands on a channel that
     // refuses this conversation, the turn hops once more and completes.
     const firstHop = failovers[0]
@@ -343,7 +345,7 @@ ${darumaRow}`)
   const health = existsSync(stateFile) ? safeJson(stateFile) : {}
   check('tripped channel is persisted as COOLDOWN', health?.healths?.['mock::mock-a']?.state === 'COOLDOWN', JSON.stringify(health?.healths?.['mock::mock-a'] ?? null))
   check(`fallback channel ${expectModel} is HEALTHY`, health?.healths?.[`mock::${expectModel}`]?.state === 'HEALTHY', JSON.stringify(health?.healths?.[`mock::${expectModel}`] ?? null))
-  if (options.reject) {
+  if (reachesReject) {
     // The refusing channel keeps serving other conversations: it must not be
     // benched, only dropped from this one.
     const rejected = health?.healths?.['mock::mock-reject']
@@ -351,6 +353,14 @@ ${darumaRow}`)
       'the refusing channel is not benched',
       rejected !== undefined && rejected.state === 'HEALTHY' && rejected.consecutiveFailures === 0,
       JSON.stringify(rejected ?? null),
+    )
+  } else if (options.reject) {
+    // Explicitly the other way round: a preferred backup answers first, so the
+    // refusing channel is never even reached and keeps no health record.
+    check(
+      'the preferred backup pre-empted the refusing channel',
+      failovers.length === 1 && failovers[0]?.to === 'mock::mock-c' && health?.healths?.['mock::mock-reject'] === undefined,
+      JSON.stringify(failovers),
     )
   }
 } catch (error) {
