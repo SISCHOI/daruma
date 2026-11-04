@@ -45,7 +45,7 @@ importers:
   packages/dsh-daruma:
     dependencies:
       daruma-core:
-        specifier: ^0.1.0
+        specifier: ^0.1.7
         version: link:../daruma-core
     devDependencies:
       '@deepseek-ai/cordis':
