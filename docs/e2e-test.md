@@ -69,6 +69,22 @@ Expect: `mock completion from mock-b`, exit 0, two failover lines
 `HEALTHY` with zero failures, because a request-level refusal must not bench a
 channel that serves every other conversation.
 
+### A stale chain entry (provider with no adapter)
+
+`--ghost` puts a channel for a provider this host has no adapter for between the
+failing and the healthy channel. This is a configuration mistake, not a provider
+failure, and the turn must still finish — production case 2026-11-04: a chain
+still listing `mt-cc` after that provider had been removed; `NO_ADAPTER` was
+folded into `UNKNOWN`, counted as transient, and the turn died.
+
+```bash
+node scripts/e2e-failover.mjs --dsh <bin.js> --ghost --failure-budget 3
+```
+
+Expect: `mock completion from mock-b`, exit 0, two failover lines
+(`mock-a -> ghost::ghost-model` with `RATE_LIMIT`, then
+`ghost::ghost-model -> mock::mock-b` with `NO_ADAPTER`), and no `give-up`.
+
 > **Running inside WSL?** WSL appends the Windows PATH, so a bare `dsh` can
 > resolve to the **Windows** install under `/mnt/c/…`; Linux node then fails to
 > load its `sharp`/`koffi` binaries. The script refuses such a host before

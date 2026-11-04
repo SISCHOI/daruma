@@ -25,6 +25,7 @@ const KNOWN_FAILURE_CODES: ReadonlySet<string> = new Set([
   'CONTEXT_WINDOW_EXCEEDED',
   'INVALID_CREDENTIAL',
   'INVALID_REQUEST',
+  'NO_ADAPTER',
 ])
 
 export function toFailureCode(code: string): FailureCode {

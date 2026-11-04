@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FAILURE_CODES, isRequestScopedCode, isRetryableCode, isTerminalCode } from './failure.ts'
+import {
+  excludesChannelForSession,
+  FAILURE_CODES,
+  isRequestScopedCode,
+  isRetryableCode,
+  isTerminalCode,
+} from './failure.ts'
 import type { FailureCode } from './failure.ts'
 
 describe('failure taxonomy', () => {
@@ -15,6 +21,7 @@ describe('failure taxonomy', () => {
     'QUOTA',
     'CONTEXT_WINDOW_EXCEEDED',
     'INVALID_CREDENTIAL',
+    'NO_ADAPTER',
   ]
   const requestScoped: FailureCode[] = ['INVALID_REQUEST']
 
@@ -22,6 +29,7 @@ describe('failure taxonomy', () => {
     expect(isRetryableCode(code)).toBe(true)
     expect(isTerminalCode(code)).toBe(false)
     expect(isRequestScopedCode(code)).toBe(false)
+    expect(excludesChannelForSession(code)).toBe(false)
   })
 
   it.each(terminal)('classifies %s as terminal', (code) => {
@@ -43,5 +51,15 @@ describe('failure taxonomy', () => {
         .filter(Boolean)
       expect(buckets, code).toHaveLength(1)
     }
+  })
+
+  it('drops a no-adapter channel from the rest of the conversation', () => {
+    // A missing adapter is not repaired by a cooldown expiring, so the channel
+    // must not be re-probed inside the same turn (production case 2026-11-04).
+    expect(excludesChannelForSession('NO_ADAPTER')).toBe(true)
+    expect(excludesChannelForSession('INVALID_REQUEST')).toBe(true)
+    // Ordinary terminal codes may recover once the user tops up or fixes a key.
+    expect(excludesChannelForSession('QUOTA')).toBe(false)
+    expect(excludesChannelForSession('TIMEOUT')).toBe(false)
   })
 })

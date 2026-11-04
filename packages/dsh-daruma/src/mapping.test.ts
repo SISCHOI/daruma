@@ -43,10 +43,12 @@ describe('mapping', () => {
     // A provider refusing one request's shape must stay distinguishable from an
     // unknown failure: it routes by conversation, not by channel health.
     expect(toFailureCode('INVALID_REQUEST')).toBe('INVALID_REQUEST')
+    // A channel whose provider has no adapter is a dead channel, not a hiccup.
+    expect(toFailureCode('NO_ADAPTER')).toBe('NO_ADAPTER')
   })
 
   it('downgrades unknown codes to UNKNOWN', () => {
-    expect(toFailureCode('NO_ADAPTER')).toBe('UNKNOWN')
+    expect(toFailureCode('NO_ADAPTERS_AT_ALL')).toBe('UNKNOWN')
     expect(toFailureCode('ABORTED')).toBe('UNKNOWN')
   })
 

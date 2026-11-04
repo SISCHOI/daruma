@@ -9,8 +9,8 @@
 
 import {
   decide,
+  excludesChannelForSession,
   freshHealth,
-  isRequestScopedCode,
   recordSuccess,
   type Channel,
   type ChannelHealth,
@@ -77,7 +77,7 @@ export class RecoveryEngine {
    * identify an agent/session so independent tasks do not share a budget. */
   onFailure(signal: FailureSignal, preferred?: Channel, scope = 'global'): RecoveryPlan {
     const scopedCount = this.failoversByScope.get(scope) ?? 0
-    if (isRequestScopedCode(signal.code)) this.excludeForScope(scope, signal.channel)
+    if (excludesChannelForSession(signal.code)) this.excludeForScope(scope, signal.channel)
     const plan = decide({
       signal,
       healths: this.healths,

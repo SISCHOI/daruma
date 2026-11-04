@@ -73,6 +73,7 @@ function parseArgs(argv) {
     else if (arg === '--layout') options.layout = argv[++i]
     else if (arg === '--backup') options.backup = true
     else if (arg === '--reject') options.reject = true
+    else if (arg === '--ghost') options.ghost = true
   }
   return options
 }
@@ -211,11 +212,15 @@ try {
     - { id: mock-c, contextWindow: 65536 }
     - { id: mock-reject, contextWindow: 65536 }
 `.split('\n').map((line) => (line === '' ? line : `${' '.repeat(indent)}${line}`)).join('\n')
-  const chainRows = options.reject
+  const chainRows = options.ghost
     ? `      - { provider: mock, model: mock-a }
+      - { provider: ghost, model: ghost-model }
+      - { provider: mock, model: mock-b }`
+    : options.reject
+      ? `      - { provider: mock, model: mock-a }
       - { provider: mock, model: mock-reject }
       - { provider: mock, model: mock-b }`
-    : `      - { provider: mock, model: mock-a }
+      : `      - { provider: mock, model: mock-a }
       - { provider: mock, model: mock-b }`
   const darumaRow = `- id: dsh-daruma
   name: dsh-daruma
@@ -295,10 +300,11 @@ ${darumaRow}`)
   if (stderr.trim() !== '') console.log(`--- dsh stderr ---\n${stderr.trim()}`)
 
   // With a seeded backup the failover must land on mock-c (the user's pick,
-  // outside the chain); with `--reject` and no backup, the first switch lands on
-  // the refusing channel and the turn has to hop once more; otherwise on mock-b.
+  // outside the chain); with `--reject` or `--ghost` and no backup, the first
+  // switch lands on the bad channel and the turn has to hop once more;
+  // otherwise on mock-b.
   const expectModel = options.backup ? 'mock-c' : 'mock-b'
-  // The refusing channel is only reached when no preferred backup pre-empts it.
+  // The bad channel is only reached when no preferred backup pre-empts it.
   const reachesReject = options.reject && !options.backup
   check('task exits 0', run.status === 0, `status=${String(run.status)} ${run.error?.message ?? ''}`)
   check(`task text came from ${expectModel}`, stdout.includes(`mock completion from ${expectModel}`), stdout.trim().split('\n').at(-1) ?? '')
@@ -309,7 +315,23 @@ ${darumaRow}`)
   const failover = failovers[0]
   check('failover log has a boot line', records.some((record) => record.kind === 'boot'))
 
-  if (reachesReject) {
+  if (options.ghost) {
+    // Production shape (2026-11-04): the chain still lists a provider this host
+    // has no adapter for. The turn must skip it and finish on the next channel.
+    const firstHop = failovers[0]
+    const secondHop = failovers[1]
+    check(
+      'failover log records mock-a -> ghost::ghost-model (RATE_LIMIT)',
+      firstHop !== undefined && firstHop.from === 'mock::mock-a' && firstHop.to === 'ghost::ghost-model' && firstHop.reason === 'RATE_LIMIT',
+      firstHop === undefined ? '(no failover line)' : JSON.stringify(firstHop),
+    )
+    check(
+      'the missing adapter is reported as NO_ADAPTER, not UNKNOWN',
+      secondHop !== undefined && secondHop.from === 'ghost::ghost-model' && secondHop.to === 'mock::mock-b' && secondHop.reason === 'NO_ADAPTER',
+      secondHop === undefined ? '(no second failover line)' : JSON.stringify(secondHop),
+    )
+    check('the turn never gave up', !records.some((record) => record.kind === 'give-up'), JSON.stringify(records.filter((r) => r.kind === 'give-up')))
+  } else if (reachesReject) {
     // Production shape: primary fails, the switch lands on a channel that
     // refuses this conversation, the turn hops once more and completes.
     const firstHop = failovers[0]

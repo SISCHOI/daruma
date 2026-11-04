@@ -193,6 +193,48 @@ describe('RecoveryEngine', () => {
     })
   })
 
+  /**
+   * Production case (2026-11-04): the chain still listed `mt-cc` long after that
+   * provider had been removed from the host. The switch landed there, the host
+   * answered `NO_ADAPTER`, and the turn died — a stale config entry took the
+   * whole task down.
+   */
+  describe('dead channel (no adapter)', () => {
+    const chainConfig: RecoveryPolicyConfig = {
+      ...config,
+      channels: [...config.channels, { id: C, provider: 'mt-cc', model: modelId('claude-3-5-haiku-latest') }],
+    }
+
+    it('fails over instead of ending the turn', () => {
+      const engine = new RecoveryEngine(chainConfig, new MemoryStore(), { nowMs: () => 1000 })
+      const plan = engine.onFailure(
+        { code: 'NO_ADAPTER', channel: B, occurredAtMs: 1000 },
+        undefined,
+        'agent-1',
+      )
+      expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: A } })
+      expect(plan.verdict.kind).not.toBe('GIVE_UP')
+      expect(engine.unusableFor('agent-1')).toEqual([B])
+    })
+
+    it('never returns to it for the rest of the conversation', () => {
+      let now = 1000
+      const engine = new RecoveryEngine(chainConfig, new MemoryStore(), { nowMs: () => now })
+      engine.onFailure({ code: 'NO_ADAPTER', channel: C, occurredAtMs: now }, undefined, 'agent-1')
+      expect(engine.unusableFor('agent-1')).toEqual([C])
+
+      // After its cooldown expires the circuit would look routable again, but a
+      // missing adapter does not appear on its own.
+      now = 1000 + chainConfig.cooldownMs + 1
+      const next = engine.onFailure(
+        { code: 'TIMEOUT', channel: A, occurredAtMs: now, retryExhausted: true },
+        undefined,
+        'agent-1',
+      )
+      expect(next.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    })
+  })
+
   describe('onSuccess', () => {
     it('resets a tripped channel to HEALTHY and persists it', () => {
       const store = new MemoryStore()

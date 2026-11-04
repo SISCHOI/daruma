@@ -71,6 +71,25 @@ describe('recovery policy decide()', () => {
     expect(plan.healthAfter.state).toBe('COOLDOWN')
   })
 
+  /**
+   * Production case (2026-11-04): the chain still listed `mt-cc` after that
+   * provider had been removed from the host. `NO_ADAPTER` arrived, was folded
+   * into `UNKNOWN`, counted as a transient failure, and the turn died instead of
+   * skipping the dead channel.
+   */
+  it('treats a missing adapter as a dead channel, not a transient failure', () => {
+    const plan = decide({
+      signal: signal('NO_ADAPTER'),
+      healths: healthsOf([[A, freshHealth(A, 0)]]),
+      failoverCount: 0,
+      config,
+      nowMs: 1000,
+    })
+    expect(plan.verdict).toMatchObject({ kind: 'FAILOVER', target: { id: B } })
+    expect(plan.healthAfter.state).toBe('COOLDOWN')
+    expect(plan.failoverCount).toBe(1)
+  })
+
   it('skips a channel that is still cooling down', () => {
     const a = freshHealth(A, 0)
     const b = { ...freshHealth(B, 0), state: 'COOLDOWN', cooldownUntilMs: 90_000 } as ChannelHealth
