@@ -48,6 +48,8 @@ dsh plugin --profile web add dsh-daruma
 
 当 `deepseek-v4-pro` 开始回 `429`，daruma 熔断它、改用 `glm-5.2` 继续。渠道健康状态落到 `~/.dsh/daruma/channel-health.json`，被熔断的渠道在重启后依然保持冷却；成功请求会自动闭合断路器（由下一个 `agent/pre-step` 推断）。每次切换/放弃决策同时追加到 `~/.dsh/daruma/failover-log.jsonl`，可事后审计。
 
+渠道故障和请求被拒要分开处理。`400 INVALID_REQUEST` 是服务端拒收**这段对话的内容**（实测形态：DeepSeek 的 thinking 模式下，带 `tool_use` 的 assistant 消息必须附 thinking 块，所以从别的模型开始的会话无法直接搬过去），此时渠道对其它会话完全正常，daruma 不会把它熔断，只在**当前会话内**把它记为不可用并换下一个渠道，直到会话结束。
+
 ## 为什么叫 daruma
 
 [达摩不倒翁](https://en.wikipedia.org/wiki/Daruma_doll) 源自一句谚语——**七転八起**（跌七次，起八次）。你的长任务也一样：被 `429` 击中，再爬起来。
@@ -56,7 +58,7 @@ dsh plugin --profile web add dsh-daruma
 
 **支持 DSH 0.2.1 版本线，已在 `0.2.1-rc.2` 上实测。** 2026-10-20 使用 `dsh-daruma` 0.1.9 验证：自动切换 7/7、指定备用渠道 7/7、备用管理 RPC 12/12；139 项单测、类型检查与构建通过。验证时尚无 `0.2.1` 正式版。浏览器渲染未检查；会话内切换/放弃提示仍使用旧聊天事件注册入口，在该版本上可能缺失，不影响已实测的故障转移与备用管理接口。见 [0.2.1 验证报告](./docs/aegis/evidence/2026-10-20-dsh-0.2.1-rc.2-compat.md)。
 
-已实现并测试：139 个单测（`daruma-core` 35 + `dsh-daruma` 104），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+已实现并测试：157 个单测（`daruma-core` 46 + `dsh-daruma` 111），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成；备份通道回请求级 `400` 时再切一次并完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
 
 跨平台：Windows / Linux / macOS 均支持；CI 在三个系统上跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 实跑；本机 WSL 2（Ubuntu 24.04）另做了一遍全流程实测。
 

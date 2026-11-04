@@ -35,6 +35,14 @@
  * three failing *turns*, so a switch on the very first one can only come from
  * the retry-exhaustion escalation. `--max-retries 5` reproduces the production
  * shape, where the in-box retry burns its whole budget before delegating.
+ *
+ * `--reject` inserts `mock-reject` between the failing and the healthy channel:
+ * it answers the provider-side `400` a real conversation triggers (DeepSeek's
+ * "`content[].thinking` … must be passed back", see
+ * `docs/aegis/evidence/2026-11-03-deepseek-thinking-replay.md`). The run then
+ * proves the production shape end to end — primary fails, the switch lands on a
+ * channel that refuses this conversation, and the turn still completes on the
+ * next one, with the refusing channel left HEALTHY instead of benched.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -64,6 +72,8 @@ function parseArgs(argv) {
     else if (arg === '--keep') options.keep = true
     else if (arg === '--layout') options.layout = argv[++i]
     else if (arg === '--backup') options.backup = true
+    else if (arg === '--reject') options.reject = true
+    else if (arg === '--ghost') options.ghost = true
   }
   return options
 }
@@ -200,13 +210,23 @@ try {
     - { id: mock-a, contextWindow: 65536 }
     - { id: mock-b, contextWindow: 65536 }
     - { id: mock-c, contextWindow: 65536 }
+    - { id: mock-reject, contextWindow: 65536 }
 `.split('\n').map((line) => (line === '' ? line : `${' '.repeat(indent)}${line}`)).join('\n')
+  const chainRows = options.ghost
+    ? `      - { provider: mock, model: mock-a }
+      - { provider: ghost, model: ghost-model }
+      - { provider: mock, model: mock-b }`
+    : options.reject
+      ? `      - { provider: mock, model: mock-a }
+      - { provider: mock, model: mock-reject }
+      - { provider: mock, model: mock-b }`
+      : `      - { provider: mock, model: mock-a }
+      - { provider: mock, model: mock-b }`
   const darumaRow = `- id: dsh-daruma
   name: dsh-daruma
   config:
     channels:
-      - { provider: mock, model: mock-a }
-      - { provider: mock, model: mock-b }
+${chainRows}
     failureBudget: ${options.failureBudget}
     stateFile: ${stateFile.replaceAll('\\', '/')}
     logFile: ${logFile.replaceAll('\\', '/')}
@@ -280,33 +300,91 @@ ${darumaRow}`)
   if (stderr.trim() !== '') console.log(`--- dsh stderr ---\n${stderr.trim()}`)
 
   // With a seeded backup the failover must land on mock-c (the user's pick,
-  // outside the chain); otherwise on chain member mock-b.
+  // outside the chain); with `--reject` or `--ghost` and no backup, the first
+  // switch lands on the bad channel and the turn has to hop once more;
+  // otherwise on mock-b.
   const expectModel = options.backup ? 'mock-c' : 'mock-b'
+  // The bad channel is only reached when no preferred backup pre-empts it.
+  const reachesReject = options.reject && !options.backup
   check('task exits 0', run.status === 0, `status=${String(run.status)} ${run.error?.message ?? ''}`)
   check(`task text came from ${expectModel}`, stdout.includes(`mock completion from ${expectModel}`), stdout.trim().split('\n').at(-1) ?? '')
 
   const logText = existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''
   const records = logText.split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line) } catch { return {} } })
-  const failover = records.find((record) => record.kind === 'failover')
+  const failovers = records.filter((record) => record.kind === 'failover')
+  const failover = failovers[0]
   check('failover log has a boot line', records.some((record) => record.kind === 'boot'))
-  check(
-    `failover log records mock-a -> ${expectModel} (RATE_LIMIT)`,
-    failover !== undefined && failover.from === 'mock::mock-a' && failover.to === `mock::${expectModel}` && failover.reason === 'RATE_LIMIT',
-    failover === undefined ? '(no failover line)' : JSON.stringify(failover),
-  )
-  // The escalation itself: a retryable code arriving from a normal-mode policy
-  // is a spent retry budget, so the circuit opens on this one failure even when
-  // `failureBudget` is higher. Without the flag, the run above would need
-  // `failureBudget` failing turns and this line would not exist.
-  check(
-    'failover was escalated by a spent retry budget',
-    failover !== undefined && failover.retryExhausted === true,
-    failover === undefined ? '(no failover line)' : `retryExhausted=${String(failover.retryExhausted)}`,
-  )
+
+  if (options.ghost) {
+    // Production shape (2026-11-04): the chain still lists a provider this host
+    // has no adapter for. The turn must skip it and finish on the next channel.
+    const firstHop = failovers[0]
+    const secondHop = failovers[1]
+    check(
+      'failover log records mock-a -> ghost::ghost-model (RATE_LIMIT)',
+      firstHop !== undefined && firstHop.from === 'mock::mock-a' && firstHop.to === 'ghost::ghost-model' && firstHop.reason === 'RATE_LIMIT',
+      firstHop === undefined ? '(no failover line)' : JSON.stringify(firstHop),
+    )
+    check(
+      'the missing adapter is reported as NO_ADAPTER, not UNKNOWN',
+      secondHop !== undefined && secondHop.from === 'ghost::ghost-model' && secondHop.to === 'mock::mock-b' && secondHop.reason === 'NO_ADAPTER',
+      secondHop === undefined ? '(no second failover line)' : JSON.stringify(secondHop),
+    )
+    check('the turn never gave up', !records.some((record) => record.kind === 'give-up'), JSON.stringify(records.filter((r) => r.kind === 'give-up')))
+  } else if (reachesReject) {
+    // Production shape: primary fails, the switch lands on a channel that
+    // refuses this conversation, the turn hops once more and completes.
+    const firstHop = failovers[0]
+    const secondHop = failovers[1]
+    check(
+      'failover log records mock-a -> mock::mock-reject (RATE_LIMIT)',
+      firstHop !== undefined && firstHop.from === 'mock::mock-a' && firstHop.to === 'mock::mock-reject' && firstHop.reason === 'RATE_LIMIT',
+      firstHop === undefined ? '(no failover line)' : JSON.stringify(firstHop),
+    )
+    check(
+      'the refusal is attributed to the request, not the channel (INVALID_REQUEST)',
+      secondHop !== undefined && secondHop.from === 'mock::mock-reject' && secondHop.to === 'mock::mock-b' && secondHop.reason === 'INVALID_REQUEST',
+      secondHop === undefined ? '(no second failover line)' : JSON.stringify(secondHop),
+    )
+    check('the turn never gave up', !records.some((record) => record.kind === 'give-up'), JSON.stringify(records.filter((r) => r.kind === 'give-up')))
+  } else {
+    check(
+      `failover log records mock-a -> ${expectModel} (RATE_LIMIT)`,
+      failover !== undefined && failover.from === 'mock::mock-a' && failover.to === `mock::${expectModel}` && failover.reason === 'RATE_LIMIT',
+      failover === undefined ? '(no failover line)' : JSON.stringify(failover),
+    )
+    // The escalation itself: a retryable code arriving from a normal-mode policy
+    // is a spent retry budget, so the circuit opens on this one failure even when
+    // `failureBudget` is higher. Without the flag, the run above would need
+    // `failureBudget` failing turns and this line would not exist.
+    check(
+      'failover was escalated by a spent retry budget',
+      failover !== undefined && failover.retryExhausted === true,
+      failover === undefined ? '(no failover line)' : `retryExhausted=${String(failover.retryExhausted)}`,
+    )
+  }
 
   const health = existsSync(stateFile) ? safeJson(stateFile) : {}
   check('tripped channel is persisted as COOLDOWN', health?.healths?.['mock::mock-a']?.state === 'COOLDOWN', JSON.stringify(health?.healths?.['mock::mock-a'] ?? null))
   check(`fallback channel ${expectModel} is HEALTHY`, health?.healths?.[`mock::${expectModel}`]?.state === 'HEALTHY', JSON.stringify(health?.healths?.[`mock::${expectModel}`] ?? null))
+  if (reachesReject) {
+    // The refusing channel keeps serving other conversations: it must not be
+    // benched, only dropped from this one.
+    const rejected = health?.healths?.['mock::mock-reject']
+    check(
+      'the refusing channel is not benched',
+      rejected !== undefined && rejected.state === 'HEALTHY' && rejected.consecutiveFailures === 0,
+      JSON.stringify(rejected ?? null),
+    )
+  } else if (options.reject) {
+    // Explicitly the other way round: a preferred backup answers first, so the
+    // refusing channel is never even reached and keeps no health record.
+    check(
+      'the preferred backup pre-empted the refusing channel',
+      failovers.length === 1 && failovers[0]?.to === 'mock::mock-c' && health?.healths?.['mock::mock-reject'] === undefined,
+      JSON.stringify(failovers),
+    )
+  }
 } catch (error) {
   console.error(`e2e aborted: ${error instanceof Error ? error.message : String(error)}`)
   failures.push('harness run')

@@ -2,20 +2,27 @@
 /**
  * Mock OpenAI-compatible LLM server for testing daruma failover.
  *
- * Models matching FAIL_MODEL (default "mock-a") get HTTP 429; every other
- * model returns a minimal valid completion. Supports both stream (SSE) and
- * non-stream responses.
+ * Models matching FAIL_MODEL (default "mock-a") get HTTP 429; models matching
+ * REJECT_MODEL (default "mock-reject") get the provider-side 400 a real
+ * conversation can trigger (a request-level refusal, not a channel failure);
+ * every other model returns a minimal valid completion. Supports both stream
+ * (SSE) and non-stream responses.
  *
  * Usage:
  *   node scripts/mock-llm-server.mjs [PORT]   # default 3099
  * Env:
- *   FAIL_MODEL   model name that should fail with 429 (default "mock-a")
+ *   FAIL_MODEL     model name that should fail with 429 (default "mock-a")
+ *   REJECT_MODEL   model name that should fail with 400 (default "mock-reject")
  */
 
 import { createServer } from 'node:http'
 
 const PORT = Number(process.argv[2] ?? 3099)
 const FAIL_MODEL = process.env.FAIL_MODEL ?? 'mock-a'
+const REJECT_MODEL = process.env.REJECT_MODEL ?? 'mock-reject'
+
+/** The message DeepSeek's Messages API returns when a tool_use turn has no thinking block. */
+const REJECT_MESSAGE = 'The `content[].thinking` in the thinking mode must be passed back to the API.'
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -34,11 +41,19 @@ function completionChunk(model, { role, content, finish }) {
 
 function handleChatCompletions(req, res, body) {
   const model = body.model ?? 'unknown'
-  console.error(`[mock] request model=${model} stream=${body.stream ?? false} -> ${model === FAIL_MODEL ? 429 : 200}`)
+  const verdict = model === FAIL_MODEL ? 429 : model === REJECT_MODEL ? 400 : 200
+  console.error(`[mock] request model=${model} stream=${body.stream ?? false} -> ${verdict}`)
 
   if (model === FAIL_MODEL) {
     return sendJson(res, 429, {
       error: { message: 'mock rate limit', type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+    })
+  }
+
+  // A request-level refusal: the channel works, this conversation does not.
+  if (model === REJECT_MODEL) {
+    return sendJson(res, 400, {
+      error: { message: REJECT_MESSAGE, type: 'invalid_request_error', code: 'invalid_request_error' },
     })
   }
 

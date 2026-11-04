@@ -8,7 +8,10 @@ no `node:*` imports, no DSH symbols.
 
 - `FailureCode` — provider-neutral taxonomy (`RATE_LIMIT`, `SERVER`,
   `TIMEOUT`, `TRANSPORT`, `EMPTY_RESPONSE`, `QUOTA`, `CONTEXT_WINDOW_EXCEEDED`,
-  `INVALID_CREDENTIAL`, `UNKNOWN`).
+  `INVALID_CREDENTIAL`, `INVALID_REQUEST`, `UNKNOWN`). `INVALID_REQUEST` is
+  *request-scoped*: the provider refused this conversation's content, so the
+  channel keeps its health and only the current conversation stops routing to
+  it.
 - `ChannelHealth` — circuit-breaker state machine
   (`HEALTHY → COOLDOWN → PROBE → HEALTHY`).
 - `decide()` — pure decision engine: same input → same `RecoveryPlan`
