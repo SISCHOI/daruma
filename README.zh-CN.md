@@ -11,7 +11,7 @@ Daruma 落在 DSH 的两个原生扩展点上：
 | 机制 | 负责方 | 作用 |
 |---|---|---|
 | **重试** | 内建 `dsh-llm-retry` | 同渠道，有界的指数退避 |
-| **换渠道** | `dsh-daruma` | 重试放弃后，或遇到终态错误（`QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`）时，切到下一个渠道 |
+| **换渠道** | `dsh-daruma` | 重试放弃后，或遇到终态错误（`QUOTA` / `INVALID_CREDENTIAL` / `CONTEXT_WINDOW_EXCEEDED`）时，切到下一个渠道；切换发生在 `llm/stream` 路由瀑布上 |
 
 决策引擎是纯函数：同样的失败历史 + 同样的渠道状态 → 同样的恢复计划。确定性、可测试、无 I/O。
 
@@ -19,7 +19,7 @@ Daruma 落在 DSH 的两个原生扩展点上：
 
 | 包 | 职责 |
 |---|---|
-| [`dsh-daruma`](./packages/dsh-daruma) | DSH 插件——挂 `agent/request-error` + `agent/request`，进程内换渠道 |
+| [`dsh-daruma`](./packages/dsh-daruma) | DSH 插件——挂 `agent/request-error` + `llm/stream`，进程内换渠道 |
 | [`daruma-core`](./packages/daruma-core) | 纯域层——故障分类、熔断状态机、恢复决策引擎 |
 
 ## 快速开始
@@ -50,15 +50,21 @@ dsh plugin --profile web add dsh-daruma
 
 渠道故障和请求被拒要分开处理。`400 INVALID_REQUEST` 是服务端拒收**这段对话的内容**（实测形态：DeepSeek 的 thinking 模式下，带 `tool_use` 的 assistant 消息必须附 thinking 块，所以从别的模型开始的会话无法直接搬过去），此时渠道对其它会话完全正常，daruma 不会把它熔断，只在**当前会话内**把它记为不可用并换下一个渠道，直到会话结束。
 
+### 切换发生在哪一层
+
+DSH 从 `0.2.1-alpha.4` 起把模型选择固定在 step 准备阶段：`agent/request` 监听器不能再改 provider/model，主循环会直接拒绝，整轮报废。所以换渠道跑在 `llm/stream`——包住每一次流式模型调用的路由瀑布上。主循环的请求原样保留（消息、系统提示词、工具、它自己记录的路由都不动），只有执行它的适配器换掉；重试的那一次直接发到目标渠道，不会再撞一次坏渠道。
+
+有一个代价需要知道：助手消息里记录的是**主循环选择的路由**，不是实际应答的渠道。真实的流量去向以 `failover-log.jsonl` 与 `channel-health.json` 为准。
+
 ## 为什么叫 daruma
 
 [达摩不倒翁](https://en.wikipedia.org/wiki/Daruma_doll) 源自一句谚语——**七転八起**（跌七次，起八次）。你的长任务也一样：被 `429` 击中，再爬起来。
 
 ## 当前状态
 
-**支持 DSH 0.2.1 版本线，已在 `0.2.1-rc.2` 上实测。** 2026-10-20 使用 `dsh-daruma` 0.1.9 验证：自动切换 7/7、指定备用渠道 7/7、备用管理 RPC 12/12；139 项单测、类型检查与构建通过。验证时尚无 `0.2.1` 正式版。浏览器渲染未检查；会话内切换/放弃提示仍使用旧聊天事件注册入口，在该版本上可能缺失，不影响已实测的故障转移与备用管理接口。见 [0.2.1 验证报告](./docs/aegis/evidence/2026-10-20-dsh-0.2.1-rc.2-compat.md)。
+**支持 DSH 0.1.x 与 0.2.x 版本线，已在 `0.2.2-rc.3` 上实测换渠道。** 2026-11-18 用桌面版自带的 `0.2.2-rc.3` 宿主跑 `e2e:failover`：主渠道 `429` → 切到 `mock-b` → 任务退出码 0，7 项断言全过（[证据](./docs/aegis/evidence/2026-11-18-llm-stream-failover.md)）。同一场景下改动前的 `main` 构建在 `0.2.2` 上整轮失败，说明修的是真问题。更早的 0.2.1 兼容验证见 [2026-10-20 验证报告](./docs/aegis/evidence/2026-10-20-dsh-0.2.1-rc.2-compat.md)。浏览器渲染未检查；会话内切换/放弃提示仍使用旧聊天事件注册入口，在该版本上可能缺失，不影响已实测的故障转移与备用管理接口。
 
-已实现并测试：157 个单测（`daruma-core` 46 + `dsh-daruma` 111），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成；备份通道回请求级 `400` 时再切一次并完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
+已实现并测试：159 个单测（`daruma-core` 46 + `dsh-daruma` 113），外加端到端换渠道实测（主渠道 mock `429` → 自动切换 → 任务完成；备份通道回请求级 `400` 时再切一次并完成）。见 [`docs/e2e-test.md`](./docs/e2e-test.md) 与 [`docs/research.md`](./docs/research.md)。
 
 跨平台：Windows / Linux / macOS 均支持；CI 在三个系统上跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 实跑；本机 WSL 2（Ubuntu 24.04）另做了一遍全流程实测。
 

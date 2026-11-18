@@ -36,7 +36,7 @@ Daruma rides three of DSH's native extension points:
 | Mechanism | Owner | Effect |
 |---|---|---|
 | **Retry** | in-box `dsh-llm-retry` | same channel, bounded exponential backoff |
-| **Fail over** | `dsh-daruma` | after retry gives up, or on a terminal error, switch to the next routable channel (user-chosen backup first) |
+| **Fail over** | `dsh-daruma` | after retry gives up, or on a terminal error, switch to the next routable channel (user-chosen backup first), on the `llm/stream` routing waterfall |
 | **Self-heal** | `dsh-daruma` | the next `agent/pre-step` / `agent/turn-stopping` without a pending failure proves the last request succeeded → reset the breaker |
 
 ```
@@ -50,6 +50,12 @@ request → 429 → dsh-llm-retry (backoff, same channel)
 ```
 
 The host exposes no request-success event, so success is *inferred*: an agent whose previous model request never tripped `agent/request-error` is considered healthy at its next step boundary or turn close.
+
+### Where the switch happens
+
+DSH 0.2.1-alpha.4 fixed the model selection at step preparation: an `agent/request` listener may no longer change the provider or model, and the loop rejects such a change mid-turn. The switch therefore runs on `llm/stream`, the routing waterfall around every streaming model call. The loop's request — messages, system prompt, tools, its own recorded route — is left untouched; only the adapter that executes it changes, and the retried attempt is dispatched straight on the target instead of hitting the dead channel again.
+
+One consequence is worth knowing: the assistant message records the route the loop selected, not the channel that actually answered. `failover-log.jsonl` and `channel-health.json` are the record of where traffic really went.
 
 ## Install
 
@@ -111,14 +117,15 @@ Fields: `from`/`to` are channel ids, `reason` is the failure code (`RATE_LIMIT`,
 
 | Package | Role |
 |---|---|
-| [`dsh-daruma`](./packages/dsh-daruma) | the DSH plugin — hooks `agent/request-error` + `agent/request` + success inference, mounts the `/dsh-daruma` RPC channel, the web client, and the JSONL audit log |
+| [`dsh-daruma`](./packages/dsh-daruma) | the DSH plugin — hooks `agent/request-error` + `llm/stream` + success inference, mounts the `/dsh-daruma` RPC channel, the web client, and the JSONL audit log |
 | [`daruma-core`](./packages/daruma-core) | pure domain layer — failure taxonomy, circuit breaker, recovery decision engine |
 
 ## Status
 
-- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.11, `daruma-core` 0.1.7)
+- On npm: [`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core) (latest: `dsh-daruma` 0.1.12, `daruma-core` 0.1.7)
 - Cross-platform: Windows, Linux and macOS — CI runs typecheck, lint, unit tests, build and the BOM guard on all three, and the failover end-to-end check on Linux and macOS; additionally verified locally inside WSL 2 (Ubuntu 24.04)
-- Unit tests: `daruma-core` 46 + `dsh-daruma` 111, all green
+- Unit tests: `daruma-core` 46 + `dsh-daruma` 113, all green
+- Failover verified on DSH `0.2.2-rc.3` (the version that made the old `agent/request` swap a hard error): `429` on the primary switches to the fallback and the task exits 0, while the pre-fix build fails the same run ([evidence](./docs/aegis/evidence/2026-11-18-llm-stream-failover.md))
 - End-to-end failover verified: mock `429` on primary → automatic switch → task completes; give-up and self-heal rounds verified live (see [`docs/e2e-test.md`](./docs/e2e-test.md)) — reproducible anywhere with `pnpm run e2e:failover`
 - Battle-tested in production on the author's DSH web instance: survived a real rate-limit storm on the primary (15 consecutive failures, multiple trips) and self-healed back to `HEALTHY` on the first successful request afterwards
 
@@ -300,14 +307,15 @@ dsh plugin --profile web add dsh-daruma
 
 | 包 | 角色 |
 |---|---|
-| [`dsh-daruma`](./packages/dsh-daruma) | DSH 插件 —— 挂 `agent/request-error` + `agent/request` + 成功推断，提供 `/dsh-daruma` RPC 通道、Web 客户端与 JSONL 审计日志 |
+| [`dsh-daruma`](./packages/dsh-daruma) | DSH 插件 —— 挂 `agent/request-error` + `llm/stream` + 成功推断，提供 `/dsh-daruma` RPC 通道、Web 客户端与 JSONL 审计日志 |
 | [`daruma-core`](./packages/daruma-core) | 纯领域层 —— 失败分类、断路器、恢复决策引擎 |
 
 ## 状态
 
-- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.11、`daruma-core` 0.1.7）
+- npm 在架：[`dsh-daruma`](https://www.npmjs.com/package/dsh-daruma) / [`daruma-core`](https://www.npmjs.com/package/daruma-core)（latest：`dsh-daruma` 0.1.12、`daruma-core` 0.1.7）
 - 跨平台：Windows / Linux / macOS —— CI 在三个系统上都跑 typecheck、lint、单测、构建与 BOM 守卫，故障转移 e2e 在 Linux 与 macOS 上实跑；另外在本机 WSL 2（Ubuntu 24.04）里全流程实跑通过
-- 单元测试（`daruma-core` 46 + `dsh-daruma` 111），全绿
+- 单元测试（`daruma-core` 46 + `dsh-daruma` 113），全绿
+- 已在 DSH `0.2.2-rc.3` 上实测换渠道（正是把旧 `agent/request` 换模型判成硬错的那个版本）：主渠道 `429` → 切到备用 → 任务退出码 0，而改动前的构建同一场景整轮失败（[证据](./docs/aegis/evidence/2026-11-18-llm-stream-failover.md)）
 - 端到端故障转移已验证：mock 主渠道 `429` → 自动切换 → 任务完成；give-up 与自愈回路均实测过（见 [`docs/e2e-test.md`](./docs/e2e-test.md)）——现在任何系统上一条 `pnpm run e2e:failover` 即可复现
 - 在作者的 DSH web 实例生产实战：扛过一次主渠道真实限流风暴（15 连败、多次跳闸），事后第一个成功请求即自愈回 `HEALTHY`
 
