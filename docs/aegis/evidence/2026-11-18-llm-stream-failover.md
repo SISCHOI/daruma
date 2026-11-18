@@ -109,15 +109,43 @@ after step preparation fixed` 报错。两者都源于同一处契约变化（�
 里换 provider/model），但**不是同一条错误文本**；对照证明的是「旧代码在该宿主上
 换渠道必挂、新代码必成」，不是「复现了生产那条消息」。
 
-## 尚未完成（部署）
+## 部署（2026-11-18 已装进桌面 profile，待重启生效）
 
-- 插件代码已构建，但桌面 profile 仍指向 npm 的 0.1.11；生效需把 desktop profile 的
-  `dsh-daruma` 指到本地构建并重启桌面版（插件只在启动时加载）。
-- 重启后的生产判据：`failover-log.jsonl` 出现晚于重启的新 `boot` 行；下一次主渠道
-  故障出现 `failover` 行且会话**不**以 `UNKNOWN` 结束；`session-77bcb2b1` 型会话
-  可正常继续。
+桌面版 profile（`~/.dsh/profiles/desktop`）原依赖 npm 上的 `dsh-daruma@0.1.10`。
+部署方式选**打包快照**而不是目录联接：桌面版历史上会清空联接目标（2026-10-13 记录）。
+
+1. 备份：`~/.dsh/backups/daruma-0.1.10-20261118/`（`package.json`、`pnpm-lock.yaml`、
+   `cordis.patch.yml` 三个原件）。
+2. `pnpm pack` 出 `daruma-core-0.1.7.tgz` / `dsh-daruma-0.1.12.tgz`，复制到
+   `~/.dsh/profiles/desktop/.local-packages/`，在 profile 内
+   `pnpm add file:./.local-packages/…`。
+3. 结果核对：profile 的 `node_modules/dsh-daruma` = `0.1.12`、`daruma-core` = `0.1.7`；
+   安装后 `lib/index.js` 与仓库构建的 SHA256 一致
+   （`0C1F942A…703CA5`，即上面 e2e 通过的那份字节）；`lib/index.js` 里有
+   `ctx.on('llm/stream', …)`、没有 `ctx.on('agent/request', …)`。
+4. 幂等核对：profile 内 `pnpm install --frozen-lockfile --offline` 输出
+   `Already up to date`，所以重启时若应用做依赖对账也不会把 0.1.12 换回 0.1.10。
+5. 过程如实说明：第一次 `pnpm add` 卡在 npmmirror 拉取**其它平台**的可选二进制上
+   （sharp / agently-cli 的 darwin/linux 变体），超时后中止；改用
+   `--registry https://registry.npmjs.org/` 后 2.7 秒完成。被裁掉的 32 个包都是非
+   Windows 平台的可选依赖，`@img/sharp-win32-x64` 与 `@tencent-qqmail/agently-cli-win32-x64`
+   都在。
+
+生效条件：重启桌面应用（插件只在启动时加载）。重启后判据见上一节。
+
+回退：把 `~/.dsh/backups/daruma-0.1.10-20261118/` 三个文件覆盖回 profile，profile 内
+`pnpm install`，再重启。
+
+## 尚未完成
+
+- 生产现场的下一次真实故障还没发生，所以「重启后新代码确实拦住了一次切换」尚未实测；
+  判据是 `failover-log.jsonl` 出现晚于重启的新 `boot` 行 + 下一次主渠道故障出现
+  `failover` 行，且会话不再以 `UNKNOWN` 结束。
 - 归属口径：助手消息记录的是主循环选择的路由，不记录实际应答渠道；真实去向以
   `failover-log.jsonl` / `channel-health.json` 为准。
+- 与本修复无关但如实记录：第一次在 0.2.2 宿主上跑 e2e（21:40）时，仓库
+  `packages/*` 的源码被清空（目录还在、内容为空，时间戳即该次运行）。第二次在独立
+  worktree 跑同一脚本没有复现，原因未定位；工作从 git 恢复后重放并提交。
 
 ## 复现命令
 
