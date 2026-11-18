@@ -1,12 +1,20 @@
 /**
  * dsh-daruma — Daruma resilience plugin for DeepSeek Harness.
  *
- * Mounts the recovery engine on the agent loop's two model-request extension
- * points:
+ * Mounts the recovery engine on the host's two model-request extension points:
  *
  * - `agent/request-error`: observe failures; when a channel trips, arm a
  *   failover target and own recovery by returning `{ kind: 'retry' }`.
- * - `agent/request`: swap the request config onto the armed target.
+ * - `llm/stream`: dispatch the retried attempt on the armed target — the
+ *   routing waterfall around every streaming model call.
+ *
+ * Failover used to run on `agent/request` by replacing the request's provider
+ * and model. DSH 0.2.1-alpha.4 fixed model selection at step preparation and
+ * made that replacement an error (`agent/request proposed "…" after step
+ * preparation fixed "…"`), so every switch killed the turn it meant to save.
+ * `llm/stream` is the layer that still owns routing: the loop's selection stays
+ * untouched, and only the executor changes. See
+ * `docs/aegis/plans/2026-11-18-llm-stream-failover.md`.
  *
  * It is intentionally downstream of the in-box `dsh-llm-retry`: that plugin
  * owns same-channel retry and delegates here (via `next()`) when it gives up,
@@ -25,12 +33,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { RequestErrorAction } from '@deepseek-ai/dsh-agent'
-import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import * as llmPackage from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import {
   channelIdOf,
-  channelIdOfConfig,
   isRetryExhausted,
-  toFailoverConfig,
+  toFailoverOptions,
   toFailureSignal,
   type EffortDisposition,
 } from './mapping.ts'
@@ -48,6 +56,35 @@ export const name = 'dsh-daruma'
 export const inject = ['agents', 'settings', 'llm'] as const
 
 export type { DarumaFailoverEvent, DarumaGiveUpEvent }
+
+/**
+ * The host marks the requests its own loop assembled (`markAgentLoopRequest`),
+ * which is how a failover stays attached to an agent request instead of
+ * hijacking a compaction or session-title call that happens to share the route.
+ *
+ * Read structurally and optionally: a host generation without the export keeps
+ * working through the `sessionId` filter instead of failing to load.
+ */
+const isAgentLoopRequest = (llmPackage as {
+  isAgentLoopRequest?: (request: GenerateOptions) => boolean
+}).isAgentLoopRequest
+
+/**
+ * How long an armed target stays usable.
+ *
+ * The retry that consumes an arm happens within seconds of the failure. A
+ * target left over from a turn that ended (give-up, user cancel) must not
+ * redirect an unrelated later request on the same session.
+ */
+const ARMED_TTL_MS = 10 * 60_000
+
+/** One armed failover target, waiting for the retried attempt to dispatch. */
+interface ArmedFailover {
+  readonly target: Channel
+  /** The channel that failed, for the audit line and logs. */
+  readonly from: ChannelId
+  readonly armedAt: number
+}
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -104,14 +141,18 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     giveUpBudget: config.giveUpBudget,
   })
 
-  // Per-agent channel currently in use (tracked from the last request).
+  // Per-agent channel currently in use (tracked from the last dispatch, which
+  // is the failover target after a switch).
   const currentChannel = new Map<string, ChannelId>()
-  // Per-agent failover target armed on the previous failed request.
-  const pending = new Map<string, Channel>()
+  // Per-agent failover target armed by the previous failed attempt.
+  const pending = new Map<string, ArmedFailover>()
   // Agents whose latest request-attempt failed and has not been followed by a
-  // fresh request yet. `agent/pre-step` infers "the last request succeeded"
+  // fresh dispatch yet. `agent/pre-step` infers "the last request succeeded"
   // only when the agent is absent here (see onSuccess wiring below).
   const failedSinceRequest = new Set<string>()
+  // Requests this plugin re-dispatched itself: the second pass through the
+  // waterfall must not arm a second redirect.
+  const redirections = new WeakSet<object>()
 
   /** The user-chosen backup channel, if set and healthy. */
   const backupChannel = (): Channel | undefined => {
@@ -120,23 +161,53 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return { id: channelIdOf(backup.provider, backup.model), provider: backup.provider, model: modelId(backup.model) }
   }
 
-  ctx.on('agent/request', async (payload, next) => {
-    // A new request attempt supersedes any recorded failure attribution.
-    failedSinceRequest.delete(payload.agent.id)
-    const current: LlmCallConfig = await next()
-    const armed = pending.get(payload.agent.id)
-    if (armed) {
-      pending.delete(payload.agent.id)
-      const { config: swapped, effort } = await toFailoverConfig(current, armed, ctx.llm)
-      currentChannel.set(payload.agent.id, channelIdOfConfig(swapped))
+  /**
+   * Dispatch one attempt on the armed target.
+   *
+   * The caller's request object is left untouched: the loop keeps its own
+   * selection and request header, and only the adapter that executes it
+   * changes. Content (messages, system prompt, tools) is copied verbatim.
+   */
+  const redirect = (options: GenerateOptions, armed: ArmedFailover): AsyncIterable<StreamChunk> => {
+    return (async function* (): AsyncIterable<StreamChunk> {
+      const { options: routed, effort } = await toFailoverOptions(options, armed.target, ctx.llm)
       ctx.logger.warn(
-        `dsh-daruma: switching ${current.provider}/${current.model} -> ${swapped.provider}/${swapped.model}`,
+        `dsh-daruma: switching ${options.provider}/${options.model} -> ${routed.provider}/${routed.model}`,
       )
-      logEffortDisposition(ctx, armed, effort)
-      return swapped
+      logEffortDisposition(ctx, armed.target, effort)
+      // Marked before dispatch: `ctx.llm.stream()` runs this waterfall again.
+      redirections.add(routed)
+      yield* ctx.llm.stream(routed)
+    })()
+  }
+
+  ctx.on('llm/stream', (options, next) => {
+    if (redirections.has(options)) return next()
+    if (isAgentLoopRequest !== undefined && !isAgentLoopRequest(options)) return next()
+    const sessionId = options.sessionId
+    if (sessionId === undefined) return next()
+
+    // One dispatched attempt supersedes any recorded failure attribution.
+    failedSinceRequest.delete(sessionId)
+
+    const route = channelIdOf(options.provider, options.model)
+    const armed = pending.get(sessionId)
+    const usable = armed !== undefined
+      && Date.now() - armed.armedAt <= ARMED_TTL_MS
+      && armed.target.id !== route
+
+    if (!usable) {
+      // Either nothing is armed or it can no longer apply; dropping it here is
+      // what keeps a stale target from redirecting a later, unrelated request.
+      pending.delete(sessionId)
+      currentChannel.set(sessionId, route)
+      return next()
     }
-    currentChannel.set(payload.agent.id, channelIdOfConfig(current))
-    return current
+
+    // One-shot: the armed target owns this attempt.
+    pending.delete(sessionId)
+    currentChannel.set(sessionId, armed.target.id)
+    return redirect(options, armed)
   })
 
   ctx.on('agent/request-error', async (payload, next): Promise<RequestErrorAction> => {
@@ -154,11 +225,11 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     const plan = engine.onFailure(signal, backupChannel(), payload.agent.id)
 
     if (plan.verdict.kind === 'FAILOVER') {
-      pending.set(payload.agent.id, plan.verdict.target)
-      const at = Date.now()
+      const armedAt = Date.now()
+      pending.set(payload.agent.id, { target: plan.verdict.target, from: channel, armedAt })
       failoverLog.append({
         kind: 'failover',
-        t: at,
+        t: armedAt,
         agentId: payload.agent.id,
         from: channel,
         to: plan.verdict.target.id,
@@ -203,7 +274,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   //   1. `agent/pre-step` — the loop proposes the next step;
   //   2. `agent/turn-stopping` — the turn is about to close.
   // At either point, `currentChannel` still names the channel of the last
-  // request, so it earns a success record — unless a failure is still
+  // dispatch, so it earns a success record — unless a failure is still
   // un-attributed (`failedSinceRequest`), which gates the false-positive
   // where the turn died on an error and never sent another request.
   // The turn-stopping arm is what makes single-step tasks (headless one-shot

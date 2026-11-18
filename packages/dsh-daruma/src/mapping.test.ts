@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   ReasoningEffortId,
-  type LlmCallConfig,
+  type GenerateOptions,
   type LlmResolvedModelInfo,
   type ResolvedRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
 import {
   channelIdOf,
-  channelIdOfConfig,
   isRetryExhausted,
-  toFailoverConfig,
+  toFailoverOptions,
   toFailureCode,
   toFailureSignal,
   type ReasoningCapabilityLookup,
@@ -55,10 +54,6 @@ describe('mapping', () => {
   it('derives channel id from provider and model', () => {
     expect(channelIdOf('mt', 'deepseek-v4-pro')).toBe('mt::deepseek-v4-pro')
     expect(channelIdOf('mt', '')).toBe('mt')
-  })
-
-  it('derives channel id from a request config', () => {
-    expect(channelIdOfConfig({ provider: 'mt', model: 'glm-5.2' })).toBe('mt::glm-5.2')
   })
 
   it('builds a failure signal with status and message', () => {
@@ -122,35 +117,36 @@ describe('mapping', () => {
     })
   })
 
-  describe('toFailoverConfig', () => {
-    const base: LlmCallConfig = {
+  describe('toFailoverOptions', () => {
+    const base: GenerateOptions = {
       provider: 'deepseek-official',
       model: 'deepseek-v4-flash',
       reasoningEffort: ReasoningEffortId('high'),
       maxTokens: 4096,
+      messages: [],
     }
 
     it('keeps an effort the target advertises, preserving every other field', async () => {
-      const { config, effort } = await toFailoverConfig(base, TARGET, lookupReturning(['off', 'low', 'high']))
+      const { options, effort } = await toFailoverOptions(base, TARGET, lookupReturning(['off', 'low', 'high']))
 
-      expect(config).toEqual({ ...base, provider: 'mt', model: 'glm-5.2' })
+      expect(options).toEqual({ ...base, provider: 'mt', model: 'glm-5.2' })
       expect(effort).toEqual({ kind: 'kept', effort: 'high' })
     })
 
     it('drops an effort the target does not advertise', async () => {
-      const { config, effort } = await toFailoverConfig(base, TARGET, lookupReturning(['off', 'low']))
+      const { options, effort } = await toFailoverOptions(base, TARGET, lookupReturning(['off', 'low']))
 
-      expect(config.provider).toBe('mt')
-      expect(config.model).toBe('glm-5.2')
-      expect(config.maxTokens).toBe(4096)
-      expect('reasoningEffort' in config).toBe(false)
+      expect(options.provider).toBe('mt')
+      expect(options.model).toBe('glm-5.2')
+      expect(options.maxTokens).toBe(4096)
+      expect('reasoningEffort' in options).toBe(false)
       expect(effort).toEqual({ kind: 'dropped-unsupported', effort: 'high', accepted: ['off', 'low'] })
     })
 
     it('drops an effort when the target advertises no reasoning capability at all', async () => {
-      const { config, effort } = await toFailoverConfig(base, TARGET, lookupReturning(undefined))
+      const { options, effort } = await toFailoverOptions(base, TARGET, lookupReturning(undefined))
 
-      expect('reasoningEffort' in config).toBe(false)
+      expect('reasoningEffort' in options).toBe(false)
       expect(effort).toEqual({ kind: 'dropped-unsupported', effort: 'high', accepted: [] })
     })
 
@@ -158,33 +154,46 @@ describe('mapping', () => {
       const throwing: ReasoningCapabilityLookup = {
         resolveModelInfo: vi.fn().mockRejectedValue(new Error('NO_ADAPTER')),
       }
-      const { config, effort } = await toFailoverConfig(base, TARGET, throwing)
+      const { options, effort } = await toFailoverOptions(base, TARGET, throwing)
 
       // Fail closed onto dispatch: an unverifiable target still gets a request
       // it can accept, rather than one validation rejects before I/O.
-      expect('reasoningEffort' in config).toBe(false)
+      expect('reasoningEffort' in options).toBe(false)
       expect(effort).toEqual({ kind: 'dropped-unverifiable', effort: 'high' })
     })
 
     it('drops an effort when no llm runtime is available', async () => {
-      const { config, effort } = await toFailoverConfig(base, TARGET, undefined)
+      const { options, effort } = await toFailoverOptions(base, TARGET, undefined)
 
-      expect('reasoningEffort' in config).toBe(false)
+      expect('reasoningEffort' in options).toBe(false)
       expect(effort).toEqual({ kind: 'dropped-unverifiable', effort: 'high' })
     })
 
     it('never queries the runtime for a request that carries no effort', async () => {
-      const withoutEffort: LlmCallConfig = {
+      const withoutEffort: GenerateOptions = {
         provider: base.provider,
         model: base.model,
         maxTokens: base.maxTokens,
+        messages: [],
       }
       const lookup: ReasoningCapabilityLookup = { resolveModelInfo: vi.fn() }
-      const { config, effort } = await toFailoverConfig(withoutEffort, TARGET, lookup)
+      const { options, effort } = await toFailoverOptions(withoutEffort, TARGET, lookup)
 
-      expect(config).toEqual({ ...withoutEffort, provider: 'mt', model: 'glm-5.2' })
+      expect(options).toEqual({ ...withoutEffort, provider: 'mt', model: 'glm-5.2' })
       expect(effort).toEqual({ kind: 'none-requested' })
       expect(lookup.resolveModelInfo).not.toHaveBeenCalled()
+    })
+
+    it('never mutates the caller request, which arrives deep-frozen', async () => {
+      const frozen = Object.freeze({
+        ...base,
+        messages: Object.freeze([]) as unknown as GenerateOptions['messages'],
+      }) as GenerateOptions
+      const { options } = await toFailoverOptions(frozen, TARGET, lookupReturning(['off', 'low']))
+
+      expect(options).not.toBe(frozen)
+      expect(frozen.provider).toBe('deepseek-official')
+      expect(frozen.reasoningEffort).toBe('high')
     })
   })
 })

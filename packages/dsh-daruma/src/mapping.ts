@@ -6,7 +6,7 @@
  * (treated as retryable).
  */
 
-import type { LlmCallConfig, LlmFailure, LlmResolvedModelInfo, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmFailure, LlmResolvedModelInfo, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import {
   channelId,
   type Channel,
@@ -35,11 +35,6 @@ export function toFailureCode(code: string): FailureCode {
 /** Stable channel identity from a provider+model pair. */
 export function channelIdOf(provider: string, model: string): ChannelId {
   return channelId(model ? `${provider}::${model}` : provider)
-}
-
-/** Channel identity of a resolved request config. */
-export function channelIdOfConfig(config: LlmCallConfig): ChannelId {
-  return channelIdOf(config.provider, config.model)
 }
 
 export function toFailureSignal(
@@ -115,9 +110,9 @@ export type EffortDisposition =
   | { readonly kind: 'dropped-unsupported'; readonly effort: string; readonly accepted: readonly string[] }
   | { readonly kind: 'dropped-unverifiable'; readonly effort: string }
 
-export interface FailoverConfig {
-  /** The config to dispatch on the failover target. */
-  readonly config: LlmCallConfig
+export interface FailoverRequest {
+  /** The request to dispatch on the failover target. */
+  readonly options: GenerateOptions
   /** What happened to the caller's effort, for the server log. */
   readonly effort: EffortDisposition
 }
@@ -147,45 +142,49 @@ async function readEfforts(
   }
 }
 
-/** Copy a config without its reasoning-effort field (the value is never kept). */
-function withoutEffort(config: LlmCallConfig): LlmCallConfig {
-  const next = { ...config }
+/** Copy a request without its reasoning-effort field (the value is never kept). */
+function withoutEffort(options: GenerateOptions): GenerateOptions {
+  const next = { ...options }
   delete next.reasoningEffort
   return next
 }
 
 /**
- * Route a request config onto a failover target in a shape that target accepts.
+ * Route a request onto a failover target in a shape that target accepts.
  *
- * Everything except the reasoning effort is copied verbatim: `maxTokens`,
- * temperature and stop sequences are request-header state the caller owns, and
- * a failover must not silently re-shape the task. The effort is the one field
- * the *target* owns, so an unusable one is dropped rather than passed on.
+ * Everything except the reasoning effort is copied verbatim: messages, system
+ * prompt, tools, `maxTokens`, temperature and stop sequences are request state
+ * the caller owns, and a failover must not silently re-shape the task. The
+ * effort is the one field the *target* owns, so an unusable one is dropped
+ * rather than passed on.
  *
- * @param config - the caller's request config, as it stood on the failed channel.
+ * The caller's request object is never mutated: a loop-built request arrives
+ * deep-frozen and, per `llm/stream`, is read-only.
+ *
+ * @param options - the caller's request, as it stood on the failed channel.
  * @param target - the channel recovery chose.
  * @param lookup - model-metadata source (`LlmRuntime`); `undefined` when the
  *   runtime is unavailable, which fails closed onto "drop the effort".
- * @returns the routed config plus what happened to the effort, for logging.
+ * @returns the routed request plus what happened to the effort, for logging.
  */
-export async function toFailoverConfig(
-  config: LlmCallConfig,
+export async function toFailoverOptions(
+  options: GenerateOptions,
   target: Channel,
   lookup?: ReasoningCapabilityLookup,
-): Promise<FailoverConfig> {
-  const routed: LlmCallConfig = { ...config, provider: target.provider, model: target.model }
-  const requested = config.reasoningEffort
-  if (requested === undefined) return { config: routed, effort: { kind: 'none-requested' } }
+): Promise<FailoverRequest> {
+  const routed: GenerateOptions = { ...options, provider: target.provider, model: target.model }
+  const requested = options.reasoningEffort
+  if (requested === undefined) return { options: routed, effort: { kind: 'none-requested' } }
 
   const advertised = await readEfforts(lookup, target)
   if (advertised.kind === 'unreadable') {
-    return { config: withoutEffort(routed), effort: { kind: 'dropped-unverifiable', effort: requested } }
+    return { options: withoutEffort(routed), effort: { kind: 'dropped-unverifiable', effort: requested } }
   }
   if (advertised.efforts.includes(requested)) {
-    return { config: routed, effort: { kind: 'kept', effort: requested } }
+    return { options: routed, effort: { kind: 'kept', effort: requested } }
   }
   return {
-    config: withoutEffort(routed),
+    options: withoutEffort(routed),
     effort: { kind: 'dropped-unsupported', effort: requested, accepted: advertised.efforts },
   }
 }
